@@ -194,10 +194,14 @@ if __name__ == '__main__':
     #if os.path.exists(dir):
     #    shutil.rmtree(dir)
     logger.configure(dir=dir)
-
+    # create environment
+    
+    env = gym.make("PongNoFrameskip-v4")
+    env = make_env(env)
+    
     # create networks
-    policy_net = DQNbn(n_actions=4).to(device)
-    target_net = DQNbn(n_actions=4).to(device)
+    policy_net = DQNbn(n_actions=env.action_space.n).to(device)
+    target_net = DQNbn(n_actions=env.action_space.n).to(device)
     target_net.load_state_dict(policy_net.state_dict())
 
     # setup optimizer
@@ -205,16 +209,11 @@ if __name__ == '__main__':
 
     steps_done = 0
 
-    # create environment
-    env = gym.make("PongNoFrameskip-v4")
-    env = make_env(env)
-
     # initialize replay memory
     memory = ReplayMemory(MEMORY_SIZE)
     
     # train model
     train(env, 4000000)
-
 
     # Load and test model
     #policy_net = torch.load("dqn_breakout_model")
