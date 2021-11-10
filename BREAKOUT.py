@@ -196,8 +196,8 @@ if __name__ == '__main__':
     logger.configure(dir=dir)
 
     # create networks
-    policy_net = DQNbn(n_actions=4).to(device)
-    target_net = DQNbn(n_actions=4).to(device)
+    policy_net = DQN(n_actions=4).to(device)
+    target_net = DQN(n_actions=4).to(device)
     target_net.load_state_dict(policy_net.state_dict())
 
     # setup optimizer
