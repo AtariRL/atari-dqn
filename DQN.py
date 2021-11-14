@@ -42,6 +42,7 @@ def optimize_model():
     if len(memory) < BATCH_SIZE:
         return
     transitions = memory.sample(BATCH_SIZE)
+
     """
     zip(*transitions) unzips the transitions into
     Transition(*) creates new named tuple
@@ -84,8 +85,7 @@ def optimize_model():
 def optimize_model_prio():
     if len(memory) < BATCH_SIZE:
         return
-
-    transitions, probabilities, positions = memory.sample(BATCH_SIZE)
+    transitions, importance, positions = memory.sample(BATCH_SIZE)
     """
     zip(*transitions) unzips the transitions into
     Transition(*) creates new named tuple
@@ -125,10 +125,17 @@ def optimize_model_prio():
     next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0].detach()
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
     
-    errors = state_action_values - expected_state_action_values.unsqueeze(1)
-    memory.set_priorities(positions, errors.flatten().tolist())
-    loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
-    
+     #state_action_values - expected_state_action_values.unsqueeze(1)
+    importance = torch.from_numpy(importance).to('cuda')
+    importance = torch.unsqueeze(importance, dim=1)
+    #errors = (state_action_values - expected_state_action_values.unsqueeze(1).detach()).pow(2) * importance
+
+    errors = (state_action_values - expected_state_action_values.unsqueeze(1).detach())
+    weighted_loss = importance * errors
+    loss = weighted_loss.mean()
+    updated_weights = (weighted_loss + 1e-6).data.cpu().numpy()
+    memory.set_priorities(positions, updated_weights.flatten().tolist())
+    #loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
     optimizer.zero_grad()
     loss.backward()
     for param in policy_net.parameters():
@@ -164,7 +171,7 @@ def train(env, n_episodes, render=False):
             reward = torch.tensor([reward], device=device)
 
             # Push the memory to the list
-            memory.push(state, action.to('cpu'), next_state, reward.to('cpu'))
+            memory.push(state, action.to('cuda'), next_state, reward.to('cuda'))
             state = next_state
 
             # Uptimize the model after X timesteps
@@ -192,7 +199,7 @@ def train(env, n_episodes, render=False):
             logger.dumpkvs()
 
         if episode % 100 == 0:
-            model_name = "dqn_pong_per_model"
+            model_name = "dqn_pong_test_per_model"
             print("Saved Model as : {}".format(model_name))
             torch.save(policy_net, model_name)
     env.close()
@@ -249,7 +256,7 @@ if __name__ == '__main__':
 
     # Setup logging for the model
     logger.set_level(DEBUG)
-    dir = "pong-per"
+    dir = "pong-test"
     logger.configure(dir=dir)
     # create environment
     env = gym.make("PongNoFrameskip-v4")

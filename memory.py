@@ -49,11 +49,10 @@ class PrioritizedReplay(object):
         #Get all probabilities
         sample_probs = self.get_probabilities(priority_scale)
         # Sample 32 Transitions from sample_prob weights
-        sample_indices = random.choices(self.memory, k=batch_size, weights=sample_probs)
-        for i in range(batch_size-1):
-            positions.append(self.memory.index(sample_indices[i]))
-        importance = self.get_importance(sample_probs)
-        return sample_indices, importance, positions
+        sample_indices = random.choices(range(len(self.memory)), k=batch_size, weights=sample_probs)
+        samples = np.array(self.memory)[sample_indices]
+        importance = self.get_importance(sample_probs[sample_indices])
+        return samples, importance, sample_indices
     
     def __len__(self):
         return len(self.memory)
