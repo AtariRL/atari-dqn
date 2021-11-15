@@ -43,9 +43,9 @@ class PrioritizedReplay(object):
         # for testing add random.uniform(0.0, 1.0)
         self.priorities[self.position] = 1
         self.position = (self.position + 1) % self.capacity
+        #print("menory size : {}".format(len(self.memory)))
         
     def sample(self, batch_size, priority_scale=1.0):
-        positions = []
         #Get all probabilities
         sample_probs = self.get_probabilities(priority_scale)
         # Sample 32 Transitions from sample_prob weights

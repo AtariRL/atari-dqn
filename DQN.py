@@ -52,6 +52,7 @@ def optimize_model():
     batch.action - tuple of all the actions (each action is an int)    
     """
     batch = Transition(*zip(*transitions))
+
     
     actions = tuple((map(lambda a: torch.tensor([[a]], device='cuda'), batch.action))) 
     rewards = tuple((map(lambda r: torch.tensor([r], device='cuda'), batch.reward))) 
@@ -100,11 +101,14 @@ def optimize_model_prio():
     # Unzip the Tuple into a list
     #batch = Transition_p(*zip(*transitions))
 
+
+    logger.logkv("positions", positions)
     #(Get it to be [('state', 'reward'), (1, 2), (1,2 )] etc
     batch = Transition(*zip(*tmp))
     # Unpack all the actions and rewards
     actions = tuple((map(lambda a: torch.tensor([[a]], device='cuda'), batch.action))) 
     rewards = tuple((map(lambda r: torch.tensor([r], device='cuda'), batch.reward))) 
+
 
     non_final_mask = torch.tensor(
         tuple(map(lambda s: s is not None, batch.next_state)),
@@ -113,29 +117,26 @@ def optimize_model_prio():
     non_final_next_states = torch.cat([s for s in batch.next_state
                                        if s is not None]).to('cuda')
     
-
     state_batch = torch.cat(batch.state).to('cuda')
     action_batch = torch.cat(actions)
     reward_batch = torch.cat(rewards)
     
     state_action_values = policy_net(state_batch).gather(1, action_batch)
     
-
     next_state_values = torch.zeros(BATCH_SIZE, device=device)
     next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0].detach()
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
     
-     #state_action_values - expected_state_action_values.unsqueeze(1)
     importance = torch.from_numpy(importance).to('cuda')
     importance = torch.unsqueeze(importance, dim=1)
-    #errors = (state_action_values - expected_state_action_values.unsqueeze(1).detach()).pow(2) * importance
-
     errors = (state_action_values - expected_state_action_values.unsqueeze(1).detach())
     weighted_loss = importance * errors
-    loss = weighted_loss.mean()
-    updated_weights = (weighted_loss + 1e-6).data.cpu().numpy()
+    loss = weighted_loss.mean().detach()
+    loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
+    updated_weights = (weighted_loss + 1e-6).data.cpu().detach().numpy()
+    
     memory.set_priorities(positions, updated_weights.flatten().tolist())
-    #loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
+    importance.detach()
     optimizer.zero_grad()
     loss.backward()
     for param in policy_net.parameters():
@@ -166,11 +167,12 @@ def train(env, n_episodes, render=False):
             if not done:
                 next_state = get_state(obs)
             else:
-                next_state = None
+                break
 
             reward = torch.tensor([reward], device=device)
-
             # Push the memory to the list
+            #memory.push(state, action.to('cuda'), next_state, reward.to('cuda'))
+
             memory.push(state, action.to('cuda'), next_state, reward.to('cuda'))
             state = next_state
 
@@ -199,7 +201,7 @@ def train(env, n_episodes, render=False):
             logger.dumpkvs()
 
         if episode % 100 == 0:
-            model_name = "dqn_pong_test_per_model"
+            model_name = "dqn_pong_final_test_per_model"
             print("Saved Model as : {}".format(model_name))
             torch.save(policy_net, model_name)
     env.close()
@@ -247,7 +249,7 @@ if __name__ == '__main__':
     EPS_END = 0.02
     EPS_DECAY = 1000000
     TARGET_UPDATE = 1000
-    RENDER = False
+    RENDER = True
     lr = 1e-4
     INITIAL_MEMORY = 10000
     MEMORY_SIZE = 10 * INITIAL_MEMORY
@@ -256,7 +258,7 @@ if __name__ == '__main__':
 
     # Setup logging for the model
     logger.set_level(DEBUG)
-    dir = "pong-test"
+    dir = "pong-final-new-test"
     logger.configure(dir=dir)
     # create environment
     env = gym.make("PongNoFrameskip-v4")
@@ -277,7 +279,7 @@ if __name__ == '__main__':
     memory = PrioritizedReplay(MEMORY_SIZE)
     
     # train model
-    train(env, 4000000)
+    train(env, 4000000, RENDER)
 
     # Load and test model
     #
