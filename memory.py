@@ -9,6 +9,7 @@ Transition = namedtuple('Transion',
                         ('state', 'action', 'next_state', 'reward'))
 
 # (st,at,rt,st+1)
+# Slow-down is not due to it using objects, using Experience class instead of transition gives same speed
 class ReplayMemory(object):
     def __init__(self, capacity):
         self.capacity = capacity
@@ -18,6 +19,7 @@ class ReplayMemory(object):
     def push(self, *args):
         if len(self.memory) < self.capacity:
             self.memory.append(None)
+        #self.memory[self.position] = Transition(*args)
         self.memory[self.position] = Experience(*args)
         self.position = (self.position + 1) % self.capacity
         
@@ -34,6 +36,7 @@ class PrioritizedReplay(object):
         self.memory =  []
         self.priorities = []
         self.position = 0
+        self.first = True
         
     def push(self, *args):
         if len(self.memory) < self.capacity:
@@ -41,16 +44,22 @@ class PrioritizedReplay(object):
             self.priorities.append(None)
         self.memory[self.position] = Experience(*args)
         # for testing add random.uniform(0.0, 1.0)
-        self.priorities[self.position] = 1
+        if self.first == True:
+            self.priorities[self.position] = 0
+            self.first = False
+        else:
+            # At first this is as appended as none, but we want it to have the largest current memory priority
+            # so we take the max of everything but last priority that is set to none (when initialized first time when replay memory is filling)
+            self.priorities[self.position] = max(self.priorities[:-1])
         self.position = (self.position + 1) % self.capacity
-        #print("menory size : {}".format(len(self.memory)))
         
     def sample(self, batch_size, priority_scale=1.0):
         #Get all probabilities
         sample_probs = self.get_probabilities(priority_scale)
         # Sample 32 Transitions from sample_prob weights
         sample_indices = random.choices(range(len(self.memory)), k=batch_size, weights=sample_probs)
-        samples = np.array(self.memory)[sample_indices]
+        samples = np.array([self.memory[i] for i in sample_indices])
+        #samples = np.array(self.memory)[sample_indices] # very big sinner, never make copies and then takes indices
         importance = self.get_importance(sample_probs[sample_indices])
         return samples, importance, sample_indices
     
@@ -69,6 +78,7 @@ class PrioritizedReplay(object):
         importance_normalized = importance / max(importance)
         return importance_normalized
 
+    # Not this
     def set_priorities(self, positions, errors, offset=0.1):
         for i,e in zip(positions, errors):
             self.priorities[i] = abs(e) + offset

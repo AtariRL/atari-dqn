@@ -20,6 +20,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import torchvision.transforms as T
 from experience import Experience
+import time
 
 
 Transition = namedtuple('Transion', 
@@ -37,7 +38,7 @@ def select_action(state):
     else:
         return torch.tensor([[random.randrange(4)]], device=device, dtype=torch.long)
 
-    
+
 def optimize_model():
     if len(memory) < BATCH_SIZE:
         return
@@ -51,7 +52,11 @@ def optimize_model():
     batch.reward - tuple of all the rewards (each reward is a float)
     batch.action - tuple of all the actions (each action is an int)    
     """
-    batch = Transition(*zip(*transitions))
+    tmp = []
+    for e in transitions:
+        tmp.append(e.convert_to_named_tuple())
+    
+    batch = Transition(*zip(*tmp))
 
     
     actions = tuple((map(lambda a: torch.tensor([[a]], device='cuda'), batch.action))) 
@@ -130,13 +135,13 @@ def optimize_model_prio():
     importance = torch.from_numpy(importance).to('cuda')
     importance = torch.unsqueeze(importance, dim=1)
     errors = (state_action_values - expected_state_action_values.unsqueeze(1).detach())
+
     weighted_loss = importance * errors
-    loss = weighted_loss.mean().detach()
-    loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
-    updated_weights = (weighted_loss + 1e-6).data.cpu().detach().numpy()
-    
+    loss = weighted_loss.mean()
+    updated_weights = (weighted_loss + 1e-6).data.cpu().numpy()
+
+
     memory.set_priorities(positions, updated_weights.flatten().tolist())
-    importance.detach()
     optimizer.zero_grad()
     loss.backward()
     for param in policy_net.parameters():
@@ -150,6 +155,7 @@ def get_state(obs):
     return state.unsqueeze(0)
 
 def train(env, n_episodes, render=False):
+    start_time = time.time()
     for episode in range(n_episodes):
         obs = env.reset()
         state = get_state(obs)
@@ -178,9 +184,7 @@ def train(env, n_episodes, render=False):
 
             # Uptimize the model after X timesteps
             if steps_done > INITIAL_MEMORY:
-                #optimize_model()
                 optimize_model_prio()
-
                 if steps_done % TARGET_UPDATE == 0:
                     target_net.load_state_dict(policy_net.state_dict())
             
@@ -193,12 +197,15 @@ def train(env, n_episodes, render=False):
             if done:
                 break
 
-        if episode % 20 == 0:
+        if episode % 1 == 0:
             logger.logkv("episode_reward", total_reward)
             logger.logkv("running_reward", running_reward)
             logger.logkv("episode", episode)
             logger.logkv("steps_done", steps_done)
             logger.dumpkvs()
+            average_episode_time = time.time() - start_time
+            start_time = time.time()
+            print("episode time " + str(average_episode_time))
 
         if episode % 100 == 0:
             model_name = "dqn_pong_final_test_per_model"
