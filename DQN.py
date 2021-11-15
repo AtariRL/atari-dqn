@@ -82,7 +82,7 @@ def optimize_model():
         param.grad.data.clamp_(-1, 1)
     optimizer.step()
 
-def optimize_model_prio():
+def optimize_model_prio(incentive=False):
     if len(memory) < BATCH_SIZE:
         return
     transitions, importance, positions = memory.sample(BATCH_SIZE)
@@ -172,6 +172,10 @@ def train(env, n_episodes, render=False):
 
             # Push the memory to the list
             memory.push(state, action.to('cuda'), next_state, reward.to('cuda'))
+
+            if steps_done % INCENTIVE_UPDATE == 0:
+                incentive_memory.push(state, action.to('cpu'), next_state, reward.to('cpu'))
+
             state = next_state
 
             # Uptimize the model after X timesteps
@@ -251,6 +255,8 @@ if __name__ == '__main__':
     lr = 1e-4
     INITIAL_MEMORY = 10000
     MEMORY_SIZE = 10 * INITIAL_MEMORY
+    INCENTIVE_SIZE = 100
+    INCENTIVE_UPDATE = 1000
     DEBUG = 10
     episode_reward_history = []
 
@@ -275,7 +281,7 @@ if __name__ == '__main__':
     # initialize replay memory
     #memory = ReplayMemory(MEMORY_SIZE)
     memory = PrioritizedReplay(MEMORY_SIZE)
-    
+    incentive_memory = IncentiveReplay(INCENTIVE_SIZE)
     # train model
     train(env, 4000000)
 
