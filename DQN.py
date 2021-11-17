@@ -148,42 +148,21 @@ def optimize_model_prio():
     cond = errors < beta
     errors = torch.where(cond, 0.5 * errors ** 2 / beta, errors - 0.5 * beta)
 
-    time_start = time.perf_counter()
     weighted_loss = importance * errors
-    time_end = time.perf_counter()
-    if(memory.logger_count % memory.logger_freq == 0):
-        time_logger.logkv("weighted_loss", time_end - time_start)
     logger.logkv("weighted_loss", weighted_loss.flatten().tolist())
 
-    time_start = time.perf_counter()
     loss = weighted_loss.mean()
-    time_end = time.perf_counter()
-    if(memory.logger_count % memory.logger_freq == 0):
-        time_logger.logkv("loss", time_end - time_start)
     logger.logkv("loss", loss.flatten().tolist())
     
     # detaches updated weights (dosen't detach loss), updated weights will be converted to list to prioritize,
     # so dosen't make sense to backpropagate
-    time_start = time.perf_counter()
     updated_weights = (weighted_loss + 1e-6).data.cpu().detach().numpy()
-    time_end = time.perf_counter()
-    if(memory.logger_count % memory.logger_freq == 0):
-        time_logger.logkv("updated_weights", time_end - time_start)
     memory.set_priorities(positions, updated_weights.flatten().tolist())
     optimizer.zero_grad()
-    time_start = time.perf_counter()
     loss.backward()
-    time_end = time.perf_counter()
-    if(memory.logger_count % memory.logger_freq == 0):
-        time_logger.logkv("backward_propagation", time_end - time_start)
     for param in policy_net.parameters():
         param.grad.data.clamp_(-1, 1)
-    time_start = time.perf_counter()
     optimizer.step()
-    time_end = time.perf_counter()
-    if(memory.logger_count % memory.logger_freq == 0):
-        time_logger.logkv("optimizer.step", time_end - time_start)
-        time_logger.dumpkvs()
 
 def get_state(obs):
     state = np.array(obs)
@@ -309,9 +288,6 @@ if __name__ == '__main__':
     logger = configure(dir)
     logger.set_level(DEBUG)
 
-    time_logger = configure(dir_time)
-    time_logger.set_level(DEBUG)
-
     # create environment
     env = gym.make("PongNoFrameskip-v4")
     env = make_env(env)
@@ -328,7 +304,7 @@ if __name__ == '__main__':
 
     # initialize replay memory
     #memory = ReplayMemory(MEMORY_SIZE)
-    memory = PrioritizedReplay(MEMORY_SIZE, time_logger)
+    memory = PrioritizedReplay(MEMORY_SIZE)
     
     # train model
     train(env, 4000000, RENDER)

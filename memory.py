@@ -32,20 +32,15 @@ class ReplayMemory(object):
 
 #(st,at,rt,st+1), |δt|
 class PrioritizedReplay(object):
-    def __init__(self, capacity, logger_obj):
+    def __init__(self, capacity):
         self.capacity = capacity
-        self.logger_obj = logger_obj
         self.memory =  []
         self.priorities = []
         self.position = 0
         self.beta = 0
         self.memory_not_filled_before = True
-        self.logger_count = 0
-        self.logger_freq = 100
 
     def push(self, *args):
-        self.logger_count += 1
-        time_start = time.perf_counter()
         if len(self.memory) < self.capacity:
             self.memory.append(None)
             self.priorities.append(None)
@@ -62,16 +57,11 @@ class PrioritizedReplay(object):
         if len(self.memory) < self.capacity:
             self.priorities[self.position] = max(self.priorities[:-1], default=1)
         else:
-            self.logger_obj.logkv("priorities", self.priorities)
             self.priorities[self.position] = max(self.priorities)
 
         self.position = (self.position + 1) % self.capacity
-        time_end = time.perf_counter()
-        if(self.logger_count % self.logger_freq == 0):
-            self.logger_obj.logkv("push", time_end - time_start)
         
     def sample(self, batch_size, alpha=1.0):
-        time_start = time.perf_counter()
         #Get all probabilities
         sample_probs = self.get_probabilities(alpha)
         # Sample 32 Transitions from sample_prob weights
@@ -79,9 +69,6 @@ class PrioritizedReplay(object):
         samples = np.array([self.memory[i] for i in sample_indices])
         #samples = np.array(self.memory)[sample_indices] # very big sinner, never make copies and then takes indices
         importance = self.get_importance(sample_probs[sample_indices])
-        time_end = time.perf_counter()
-        if(self.logger_count % self.logger_freq == 0):
-            self.logger_obj.logkv("sample", time_end - time_start)
         return samples, importance, sample_indices
     
     def __len__(self):
@@ -90,29 +77,17 @@ class PrioritizedReplay(object):
     # To sample a probability for each batch
     # The probability sample will have sum = 1
     def get_probabilities(self, alpha):
-        time_start = time.perf_counter()
         scaled_priorities = np.array(self.priorities) ** alpha
         sample_probabilities = scaled_priorities / sum(scaled_priorities)
-        time_end = time.perf_counter()
-        if(self.logger_count % self.logger_freq == 0):
-            self.logger_obj.logkv("get_probabilities", time_end - time_start)
         return sample_probabilities
     
     def get_importance(self, probabilities):
-        time_start = time.perf_counter()
         importance = 1/len(self.memory) * 1/probabilities
         importance = importance ** self.beta
         importance_normalized = importance / max(importance)
-        time_end = time.perf_counter()
-        if(self.logger_count % self.logger_freq == 0):
-            self.logger_obj.logkv("get_importance", time_end - time_start)
         return importance_normalized
 
     # Not this
     def set_priorities(self, positions, errors, offset=0.1):
-        time_start = time.perf_counter()
         for i,e in zip(positions, errors):
             self.priorities[i] = (abs(e) + offset)
-        time_end = time.perf_counter()
-        if(self.logger_count % self.logger_freq == 0):
-            self.logger_obj.logkv("set_priorities", time_end - time_start)
