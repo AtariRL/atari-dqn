@@ -283,7 +283,6 @@ if __name__ == '__main__':
 
     # Setup logging for the model
     dir = "pong-final-new-test"
-    dir_time = "time_stamps"
 
     logger = configure(dir)
     logger.set_level(DEBUG)
