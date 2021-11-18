@@ -39,7 +39,8 @@ def select_action(state):
     #print(eps_threshold)
     steps_done += 1
 
-    memory.beta = min(INITIAL_BETA + (1 - 1 * math.exp(-1. * steps_done / EPS_DECAY)), 1)
+    if SHORT_PER:
+        short_term_memory.beta = min(INITIAL_BETA + (1 - 1 * math.exp(-1. * steps_done / EPS_DECAY)), 1)
 
     if sample > eps_threshold:
         with torch.no_grad():
@@ -48,10 +49,12 @@ def select_action(state):
         return torch.tensor([[random.randrange(4)]], device=device, dtype=torch.long)
 
 
-def optimize_model():
+def optimize_model(memory):
     if len(memory) < BATCH_SIZE:
         return
-    transitions, _, _ = memory.sample(BATCH_SIZE)
+    transitions = memory.sample(BATCH_SIZE)
+
+    
 
     """
     zip(*transitions) unzips the transitions into
@@ -97,7 +100,7 @@ def optimize_model():
         param.grad.data.clamp_(-1, 1)
     optimizer.step()
 
-def optimize_model_prio():
+def optimize_model_prio(memory):
     if len(memory) < BATCH_SIZE:
         return
     transitions, importance, positions = memory.sample(BATCH_SIZE)
@@ -195,12 +198,17 @@ def train(env, n_episodes, render=False):
             # Push the memory to the list
             #memory.push(state, action.to('cuda'), next_state, reward.to('cuda'))
 
-            memory.push(state, action.to('cuda'), next_state, reward.to('cuda'))
+            short_term_memory.push(state, action.to('cuda'), next_state, reward.to('cuda'))
+            if steps_done % LONG_TERM_PUSH_FREQ == 0:
+                long_term_memory.push(state, action.to('cuda'), next_state, reward.to('cuda'))
+            
             state = next_state
 
             # Uptimize the model after X timesteps
             if steps_done > INITIAL_MEMORY:
-                optimize_model_prio()
+                optimize_model(short_term_memory)
+                if steps_done % LONG_TERM_UPDATES_FREQ == 0:
+                    optimize_model(long_term_memory)
                 if steps_done % TARGET_UPDATE == 0:
                     target_net.load_state_dict(policy_net.state_dict())
             
@@ -275,14 +283,21 @@ if __name__ == '__main__':
     TARGET_UPDATE = 1000
     RENDER = True
     lr = 1e-4
-    #INITIAL_MEMORY = 32
-    INITIAL_MEMORY = 10000
+    INITIAL_MEMORY = 32
+    #INITIAL_MEMORY = 10000
     MEMORY_SIZE = 10 * INITIAL_MEMORY
     DEBUG = 10
+    LONG_TERM_UPDATES_FREQ = 1000
+    LONG_TERM_PUSH_FREQ = 100
+
+    # Model Flags
+    INCENTIVE = True
+    SHORT_PER = False
+
     episode_reward_history = []
 
     # Setup logging for the model
-    dir = "pong-final-new-test"
+    dir = "debug"
 
     logger = configure(dir)
     logger.set_level(DEBUG)
@@ -302,9 +317,9 @@ if __name__ == '__main__':
     steps_done = 0
 
     # initialize replay memory
-    #memory = ReplayMemory(MEMORY_SIZE)
-    memory = PrioritizedReplay(MEMORY_SIZE)
-    
+    short_term_memory = ReplayMemory(MEMORY_SIZE)
+    long_term_memory = ReplayMemory(MEMORY_SIZE)
+
     # train model
     train(env, 4000000, RENDER)
 
