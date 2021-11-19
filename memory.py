@@ -16,6 +16,7 @@ class ReplayMemory(object):
         self.capacity = capacity
         self.memory = []
         self.position = 0
+        self.latest_max_TD_error = 0
         
     def push(self, *args):
         if len(self.memory) < self.capacity:
@@ -39,6 +40,7 @@ class PrioritizedReplay(object):
         self.position = 0
         self.beta = 0
         self.memory_not_filled_before = True
+        self.latest_max_TD_error = 0
 
     def push(self, *args):
         if len(self.memory) < self.capacity:
@@ -61,7 +63,7 @@ class PrioritizedReplay(object):
 
         self.position = (self.position + 1) % self.capacity
         
-    def sample(self, batch_size, alpha=1.0):
+    def sample(self, batch_size, alpha=0.6):
         #Get all probabilities
         sample_probs = self.get_probabilities(alpha)
         # Sample 32 Transitions from sample_prob weights

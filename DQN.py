@@ -39,8 +39,11 @@ def select_action(state):
     #print(eps_threshold)
     steps_done += 1
 
-    if SHORT_PER:
-        short_term_memory.beta = min(INITIAL_BETA + (1 - 1 * math.exp(-1. * steps_done / EPS_DECAY)), 1)
+    # Increase the beta variable torwards 1 during training. The beta variable determines priority importance. 
+    if ORM_PER:
+        ORM.beta = min(INITIAL_BETA + (1 - 1 * math.exp(-1. * steps_done / EPS_DECAY)), 1)
+    if IRM_PER:
+        IRM.beta = min(INITIAL_BETA + (1 - 1 * math.exp(-1. * steps_done / EPS_DECAY)), 1)
 
     if sample > eps_threshold:
         with torch.no_grad():
@@ -53,8 +56,6 @@ def optimize_model(memory):
     if len(memory) < BATCH_SIZE:
         return
     transitions = memory.sample(BATCH_SIZE)
-
-    
 
     """
     zip(*transitions) unzips the transitions into
@@ -92,7 +93,27 @@ def optimize_model(memory):
     next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0].detach()
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
     
-    loss = F.smooth_l1_loss(state_action_values, expected_state_action_values.unsqueeze(1))
+    beta = 1
+    TD_errors = torch.abs(state_action_values - expected_state_action_values.unsqueeze(1).detach())
+    
+    # smooth_l1_loss from https://github.com/facebookresearch/fvcore/blob/main/fvcore/nn/smooth_l1_loss.py
+    cond = TD_errors < beta
+    TD_errors = torch.where(cond, 0.5 * TD_errors ** 2 / beta, TD_errors - 0.5 * beta)
+    
+    loss = TD_errors.mean()
+
+    # Push sample with higest TD_error to IRM
+    if(OPTIMIZE_MODEL_PUSH):
+        highest_TD_error_index = torch.argmax(TD_errors)
+        highest_TD_error = torch.max(TD_errors)
+        TD_sample = tmp[highest_TD_error_index]
+        # Garanteed push every IRM_PUSH_FREQ
+        if(steps_done % IRM_PUSH_FREQ):
+            IRM.push(TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+        elif(highest_TD_error > memory.latest_max_TD_error):
+            IRM.push(TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+        
+        memory.latest_max_TD_error = highest_TD_error
     
     optimizer.zero_grad()
     loss.backward()
@@ -133,7 +154,7 @@ def optimize_model_prio(memory):
     
     non_final_next_states = torch.cat([s for s in batch.next_state
                                        if s is not None]).to('cuda')
-    
+
     state_batch = torch.cat(batch.state).to('cuda')
     action_batch = torch.cat(actions)
     reward_batch = torch.cat(rewards)
@@ -147,11 +168,27 @@ def optimize_model_prio(memory):
     importance = torch.from_numpy(importance).to('cuda')
     importance = torch.unsqueeze(importance, dim=1)
     beta = 1
-    errors = torch.abs(state_action_values - expected_state_action_values.unsqueeze(1).detach())
-    cond = errors < beta
-    errors = torch.where(cond, 0.5 * errors ** 2 / beta, errors - 0.5 * beta)
+    TD_errors = torch.abs(state_action_values - expected_state_action_values.unsqueeze(1).detach())
+    
+    # smooth_l1_loss from https://github.com/facebookresearch/fvcore/blob/main/fvcore/nn/smooth_l1_loss.py
+    cond = TD_errors < beta
+    TD_errors = torch.where(cond, 0.5 * TD_errors ** 2 / beta, TD_errors - 0.5 * beta)
 
-    weighted_loss = importance * errors
+
+    # Push sample with higest TD_error to IRM
+    if(PRIO_OPTIMIZE_MODEL_PUSH):
+        highest_TD_error_index = torch.argmax(TD_errors)
+        highest_TD_error = torch.max(TD_errors)
+        TD_sample = tmp[highest_TD_error_index]
+        # Garanteed push every IRM_PUSH_FREQ
+        if(steps_done % IRM_PUSH_FREQ):
+            IRM.push(TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+        elif(highest_TD_error > memory.latest_max_TD_error):
+            IRM.push(TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+        
+        memory.latest_max_TD_error = highest_TD_error
+
+    weighted_loss = importance * TD_errors
     logger.logkv("weighted_loss", weighted_loss.flatten().tolist())
 
     loss = weighted_loss.mean()
@@ -198,17 +235,32 @@ def train(env, n_episodes, render=False):
             # Push the memory to the list
             #memory.push(state, action.to('cuda'), next_state, reward.to('cuda'))
 
-            short_term_memory.push(state, action.to('cuda'), next_state, reward.to('cuda'))
-            if steps_done % LONG_TERM_PUSH_FREQ == 0:
-                long_term_memory.push(state, action.to('cuda'), next_state, reward.to('cuda'))
+            # Push memory to ORM every step
+            # Memories are pushed to IRM every nth step in RANDOM IRM model
+            # In other models, memories are pushed to IRM after TD_error calculations in prio_optimize_model and optimize_model
+            ORM.push(state, action.to('cuda'), next_state, reward.to('cuda'))
+            if(RANDOM_IRM):
+                if steps_done % IRM_PUSH_FREQ == 0:
+                    IRM.push(state, action.to('cuda'), next_state, reward.to('cuda'))
             
             state = next_state
 
-            # Uptimize the model after X timesteps
+            # Optimize the model after replay memory have been filled to INITIAL_MEMORY
+            # Implement INITIAL_MEMORY for IRM? atm we implicitly it have reached a batch size worth of memories
             if steps_done > INITIAL_MEMORY:
-                optimize_model(short_term_memory)
-                if steps_done % LONG_TERM_UPDATES_FREQ == 0:
-                    optimize_model(long_term_memory)
+                # ORM will be used for an gradient update every step, IRM
+                # will be used every IRM_UPDATES_FREQ
+                if(ORM_PER):
+                    optimize_model_prio(ORM)
+                else:
+                    optimize_model(ORM)
+                
+                if steps_done % IRM_UPDATES_FREQ == 0:
+                    if(IRM_PER):
+                        optimize_model_prio(IRM)
+                    else:
+                        optimize_model(IRM)
+                
                 if steps_done % TARGET_UPDATE == 0:
                     target_net.load_state_dict(policy_net.state_dict())
             
@@ -279,21 +331,50 @@ if __name__ == '__main__':
     EPS_START = 1
     EPS_END = 0.02
     EPS_DECAY = 1000000
-    INITIAL_BETA = 0.6
+    INITIAL_BETA = 0.4
     TARGET_UPDATE = 1000
     RENDER = True
     lr = 1e-4
-    INITIAL_MEMORY = 32
-    #INITIAL_MEMORY = 10000
+    #INITIAL_MEMORY = 32
+    INITIAL_MEMORY = 10000
     MEMORY_SIZE = 10 * INITIAL_MEMORY
     DEBUG = 10
-    LONG_TERM_UPDATES_FREQ = 1000
-    LONG_TERM_PUSH_FREQ = 100
+    IRM_UPDATES_FREQ = 1000
+    IRM_PUSH_FREQ = 100
+    
+    # Flag for HIGEST_ERROR_IRM implementation
+    # Makes either optimize_model or prio_optimize_model push the highest TD_error memory to IRM
+    # every IRM_PUSH_FREQ
+    OPTIMIZE_MODEL_PUSH = False
+    PRIO_OPTIMIZE_MODEL_PUSH = False
 
-    # Model Flags
-    INCENTIVE = True
-    SHORT_PER = False
+    # Model Flags 
+    ORM_PER = False
+    IRM_PER = False
 
+    # Model Configurations
+    RANDOM_IRM = True
+    HIGHEST_ERROR = False
+    HIGHEST_ERROR_PER = False
+    DEBUG_MODEL = False
+
+    if RANDOM_IRM:
+        print("Model Configuration: RANDOM_IRM")
+    
+    if HIGHEST_ERROR:
+        print("Model Configuration: HIGHEST_ERROR")
+        OPTIMIZE_MODEL_PUSH = True
+
+    if HIGHEST_ERROR_PER:
+        print("Model Configuration: HIGHEST_ERROR with PER ORM")
+        ORM_PER = True
+        PRIO_OPTIMIZE_MODEL_PUSH = True
+
+    if DEBUG_MODEL:
+        print("Model Configuration: DEBUG_MODEL")
+        ORM_PER = True
+        IRM_PER = True
+    
     episode_reward_history = []
 
     # Setup logging for the model
@@ -317,8 +398,16 @@ if __name__ == '__main__':
     steps_done = 0
 
     # initialize replay memory
-    short_term_memory = ReplayMemory(MEMORY_SIZE)
-    long_term_memory = ReplayMemory(MEMORY_SIZE)
+    ORM = ReplayMemory(MEMORY_SIZE)
+    IRM = ReplayMemory(MEMORY_SIZE)
+    
+    if(ORM_PER):
+        print("Initialized ORM with Prioritized Experience Replay")
+        ORM = PrioritizedReplay(MEMORY_SIZE)
+    if(IRM_PER):
+        print("Initialized IRM with Prioritized Experience Replay")
+        IRM = PrioritizedReplay(MEMORY_SIZE)
+
 
     # train model
     train(env, 4000000, RENDER)
