@@ -26,6 +26,30 @@ from logger import configure
 Transition = namedtuple('Transion', 
                         ('state', 'action', 'next_state', 'reward'))
 
+def save_params():
+    import json
+
+    data = {}
+    data['params'] = []
+    data['params'].append({
+    'BATCH_SIZE': BATCH_SIZE,
+    'GAMMA': GAMMA,
+    'EPS_START': EPS_START,
+    'EPS_END': EPS_END,
+    'EPS_DECAY': EPS_DECAY,
+    'INITIAL_BETA': INITIAL_BETA,
+    'TARGET_UPDATE': TARGET_UPDATE,
+    'lr': lr,
+    'INITIAL_MEMORY': INITIAL_MEMORY,
+    'IRM_MEM_SIZE': IRM_MEMORY_SIZE,
+    'ORM_MEM_SIZE': ORM_MEMORY_SIZE,
+    'IRM_UPDATES_FREQ': IRM_UPDATES_FREQ,
+    'IRM_PUSH_FREQ': IRM_PUSH_FREQ
+    })
+
+    with open('parameters.json', 'w+') as json_out:
+        json.dump(data, json_out)
+
 def select_action(state):
     global steps_done
     sample = random.random()
@@ -338,7 +362,6 @@ def visualize(env, n_episodes, policy, render=True):
 if __name__ == '__main__':
     # set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # hyperparameters
     BATCH_SIZE = 32
@@ -350,9 +373,10 @@ if __name__ == '__main__':
     TARGET_UPDATE = 1000
     RENDER = True
     lr = 1e-4
-    INITIAL_MEMORY = 32
-    #INITIAL_MEMORY = 10000
-    MEMORY_SIZE = 10 * INITIAL_MEMORY
+    #INITIAL_MEMORY = 32
+    INITIAL_MEMORY = 10000
+    ORM_MEMORY_SIZE = 10 * INITIAL_MEMORY
+    IRM_MEMORY_SIZE = 10 * INITIAL_MEMORY
     DEBUG = 10
     IRM_UPDATES_FREQ = 200
     IRM_PUSH_FREQ = 100
@@ -399,26 +423,28 @@ if __name__ == '__main__':
     steps_done = 0
 
     # initialize replay memory
-    ORM = ReplayMemory(MEMORY_SIZE)
-    IRM = ReplayMemory(MEMORY_SIZE)
+    ORM = ReplayMemory(ORM_MEMORY_SIZE)
+    IRM = ReplayMemory(IRM_MEMORY_SIZE)
     
     if(ORM_PER):
         print("Initialized ORM with Prioritized Experience Replay")
-        ORM = PrioritizedReplay(MEMORY_SIZE)
+        ORM = PrioritizedReplay(ORM_MEMORY_SIZE)
     if(IRM_PER):
         print("Initialized IRM with Prioritized Experience Replay")
-        IRM = PrioritizedReplay(MEMORY_SIZE)
+        IRM = PrioritizedReplay(IRM_MEMORY_SIZE)
     # When running the highest error model, activate push_during_optimize for the ORM and replace IRM with
     # a different memory class that replaces lowest td_error samples with highest td_error samples when full
     if(HIGHEST_ERROR or HIGHEST_ERROR_PER):
         ORM.push_during_optimize = True
-        IRM = HighestErrorMemory(MEMORY_SIZE)
+        IRM = HighestErrorMemory(IRM_MEMORY_SIZE)
 
 
     # train model
+    save_params()
     train(env, 4000000, RENDER)
 
     # Load and test model
     #
     #visualize(env, 1, policy_net, render=True)
+
 
