@@ -17,19 +17,56 @@ class ReplayMemory(object):
         self.memory = []
         self.position = 0
         self.latest_max_TD_error = 0
-        
+        self.push_during_optimize = False
+
     def push(self, *args):
         if len(self.memory) < self.capacity:
             self.memory.append(None)
-        #self.memory[self.position] = Transition(*args)
+
         self.memory[self.position] = Experience(*args)
         self.position = (self.position + 1) % self.capacity
-        
+
+
     def sample(self, batch_size):
         return random.sample(self.memory, batch_size)
     
     def __len__(self):
         return len(self.memory)
+
+class HighestErrorMemory(object):
+    def __init__(self, capacity):
+        self.capacity = capacity
+        self.memory = []
+        self.TD_errors = np.array([])
+        self.latest_max_TD_error = 0
+        self.push_during_optimize = False
+
+    # Appends TD_error when adding elements
+    def push(self, TD_error, *args):
+        if len(self.memory) < self.capacity:
+            self.memory.append(Experience(*args))
+            self.TD_errors = np.append(self.TD_errors, TD_error)
+        else:       
+            # Replaces lowest TD_error when memory is full
+            lowest_TD_error_index = np.argmin(self.TD_errors)
+            #debug_msg = "current td_errors {}\n lowest error {}\n replaced with new error {}\n memory size {}"
+            #print(debug_msg.format(self.TD_errors, self.TD_errors[lowest_TD_error_index], TD_error, len(self.memory)))
+            self.memory[lowest_TD_error_index] = Experience(*args)
+            self.TD_errors[lowest_TD_error_index] = TD_error
+
+
+    def sample(self, batch_size):
+        positions = random.choices(range(len(self.memory)), k=batch_size)
+        samples = np.array([self.memory[i] for i in positions])
+        return samples, positions
+    
+    def __len__(self):
+        return len(self.memory)
+
+    def update_errors_in_memory(self, positions, errors):
+        for i,e in zip(positions, errors):
+            self.TD_errors[i] = abs(e)
+    
 
 #(st,at,rt,st+1), |δt|
 class PrioritizedReplay(object):
@@ -41,6 +78,7 @@ class PrioritizedReplay(object):
         self.beta = 0
         self.memory_not_filled_before = True
         self.latest_max_TD_error = 0
+        self.push_during_optimize = False
 
     def push(self, *args):
         if len(self.memory) < self.capacity:
@@ -89,7 +127,7 @@ class PrioritizedReplay(object):
         importance_normalized = importance / max(importance)
         return importance_normalized
 
-    # Not this
+    # try non-zipped, positions[i], errors[i]
     def set_priorities(self, positions, errors, offset=0.1):
         for i,e in zip(positions, errors):
             self.priorities[i] = (abs(e) + offset)

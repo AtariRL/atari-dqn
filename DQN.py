@@ -11,7 +11,7 @@ import gym
 from logger import Logger
 
 from wrappers import *
-from memory import ReplayMemory, PrioritizedReplay
+from memory import ReplayMemory, PrioritizedReplay, HighestErrorMemory
 from models import *
 
 import torch
@@ -55,7 +55,12 @@ def select_action(state):
 def optimize_model(memory):
     if len(memory) < BATCH_SIZE:
         return
-    transitions = memory.sample(BATCH_SIZE)
+    
+    # If we are running a highest error model and we are not the ORM (who have the push_during_optimize flag set to true), i.e. we are running HighestErrorMemory
+    if (HIGHEST_ERROR or HIGHEST_ERROR_PER) and not memory.push_during_optimize:
+        transitions, positions = memory.sample(BATCH_SIZE)
+    else:
+        transitions = memory.sample(BATCH_SIZE)
 
     """
     zip(*transitions) unzips the transitions into
@@ -100,21 +105,31 @@ def optimize_model(memory):
     cond = TD_errors < beta
     TD_errors = torch.where(cond, 0.5 * TD_errors ** 2 / beta, TD_errors - 0.5 * beta)
     
+    # update errors in our td_error IRM
+    if((HIGHEST_ERROR or HIGHEST_ERROR_PER) and not memory.push_during_optimize):
+        print("Performed Update with Highest Error IRM")
+        memory.update_errors_in_memory(positions, TD_errors)
+
     loss = TD_errors.mean()
 
     # Push sample with higest TD_error to IRM
-    if(OPTIMIZE_MODEL_PUSH):
-        highest_TD_error_index = torch.argmax(TD_errors)
-        highest_TD_error = torch.max(TD_errors)
+    # only ORM should do this
+    if memory.push_during_optimize:
+        abs_TD_errors = torch.abs(TD_errors)
+        highest_TD_error_index = torch.argmax(abs_TD_errors)
+        highest_TD_error = torch.max(abs_TD_errors).item()
+
         TD_sample = tmp[highest_TD_error_index]
-        # Garanteed push every IRM_PUSH_FREQ
-        if(steps_done % IRM_PUSH_FREQ):
-            IRM.push(TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
-        elif(highest_TD_error > memory.latest_max_TD_error):
-            IRM.push(TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+
+        # guaranteed push every IRM_PUSH_FREQ
+        if steps_done % IRM_PUSH_FREQ:
+            IRM.push(highest_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+        elif highest_TD_error > memory.latest_max_TD_error:
+            IRM.push(highest_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
         
         memory.latest_max_TD_error = highest_TD_error
     
+
     optimizer.zero_grad()
     loss.backward()
     for param in policy_net.parameters():
@@ -136,9 +151,6 @@ def optimize_model_prio(memory):
     tmp = []
     for e in transitions:
         tmp.append(e.convert_to_named_tuple())
-    # Unzip the Tuple into a list
-    #batch = Transition_p(*zip(*transitions))
-
 
     logger.logkv("positions", positions)
     #(Get it to be [('state', 'reward'), (1, 2), (1,2 )] etc
@@ -176,15 +188,17 @@ def optimize_model_prio(memory):
 
 
     # Push sample with higest TD_error to IRM
-    if(PRIO_OPTIMIZE_MODEL_PUSH):
-        highest_TD_error_index = torch.argmax(TD_errors)
-        highest_TD_error = torch.max(TD_errors)
+    if memory.push_during_optimize:
+        abs_TD_errors = torch.abs(TD_errors)
+        highest_TD_error_index = torch.argmax(abs_TD_errors)
+        highest_TD_error = torch.max(abs_TD_errors).item()
+        
         TD_sample = tmp[highest_TD_error_index]
         # Garanteed push every IRM_PUSH_FREQ
-        if(steps_done % IRM_PUSH_FREQ):
-            IRM.push(TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
-        elif(highest_TD_error > memory.latest_max_TD_error):
-            IRM.push(TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+        if steps_done % IRM_PUSH_FREQ:
+            IRM.push(highest_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+        elif highest_TD_error > memory.latest_max_TD_error:
+            IRM.push(highest_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
         
         memory.latest_max_TD_error = highest_TD_error
 
@@ -250,13 +264,13 @@ def train(env, n_episodes, render=False):
             if steps_done > INITIAL_MEMORY:
                 # ORM will be used for an gradient update every step, IRM
                 # will be used every IRM_UPDATES_FREQ
-                if(ORM_PER):
+                if ORM_PER:
                     optimize_model_prio(ORM)
                 else:
                     optimize_model(ORM)
                 
                 if steps_done % IRM_UPDATES_FREQ == 0:
-                    if(IRM_PER):
+                    if IRM_PER:
                         optimize_model_prio(IRM)
                     else:
                         optimize_model(IRM)
@@ -324,6 +338,7 @@ def visualize(env, n_episodes, policy, render=True):
 if __name__ == '__main__':
     # set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # hyperparameters
     BATCH_SIZE = 32
@@ -335,45 +350,31 @@ if __name__ == '__main__':
     TARGET_UPDATE = 1000
     RENDER = True
     lr = 1e-4
-    #INITIAL_MEMORY = 32
-    INITIAL_MEMORY = 10000
+    INITIAL_MEMORY = 32
+    #INITIAL_MEMORY = 10000
     MEMORY_SIZE = 10 * INITIAL_MEMORY
     DEBUG = 10
-    IRM_UPDATES_FREQ = 1000
+    IRM_UPDATES_FREQ = 200
     IRM_PUSH_FREQ = 100
-    
-    # Flag for HIGEST_ERROR_IRM implementation
-    # Makes either optimize_model or prio_optimize_model push the highest TD_error memory to IRM
-    # every IRM_PUSH_FREQ
-    OPTIMIZE_MODEL_PUSH = False
-    PRIO_OPTIMIZE_MODEL_PUSH = False
 
     # Model Flags 
     ORM_PER = False
     IRM_PER = False
 
     # Model Configurations
-    RANDOM_IRM = True
-    HIGHEST_ERROR = False
+    RANDOM_IRM = False
+    HIGHEST_ERROR = True
     HIGHEST_ERROR_PER = False
-    DEBUG_MODEL = False
 
     if RANDOM_IRM:
         print("Model Configuration: RANDOM_IRM")
     
     if HIGHEST_ERROR:
         print("Model Configuration: HIGHEST_ERROR")
-        OPTIMIZE_MODEL_PUSH = True
 
     if HIGHEST_ERROR_PER:
         print("Model Configuration: HIGHEST_ERROR with PER ORM")
         ORM_PER = True
-        PRIO_OPTIMIZE_MODEL_PUSH = True
-
-    if DEBUG_MODEL:
-        print("Model Configuration: DEBUG_MODEL")
-        ORM_PER = True
-        IRM_PER = True
     
     episode_reward_history = []
 
@@ -407,6 +408,11 @@ if __name__ == '__main__':
     if(IRM_PER):
         print("Initialized IRM with Prioritized Experience Replay")
         IRM = PrioritizedReplay(MEMORY_SIZE)
+    # When running the highest error model, activate push_during_optimize for the ORM and replace IRM with
+    # a different memory class that replaces lowest td_error samples with highest td_error samples when full
+    if(HIGHEST_ERROR or HIGHEST_ERROR_PER):
+        ORM.push_during_optimize = True
+        IRM = HighestErrorMemory(MEMORY_SIZE)
 
 
     # train model
