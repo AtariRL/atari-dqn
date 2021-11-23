@@ -11,7 +11,7 @@ import gym
 from logger import Logger
 
 from wrappers import *
-from memory import ReplayMemory, PrioritizedReplay, HighestErrorMemory
+from memory import ReplayMemory, PrioritizedReplay, HighestErrorMemory, PrioritizedIRBMemory
 from models import *
 
 import torch
@@ -22,6 +22,8 @@ import torchvision.transforms as T
 from experience import Experience
 import time
 from logger import configure
+
+
 
 Transition = namedtuple('Transion', 
                         ('state', 'action', 'next_state', 'reward'))
@@ -129,16 +131,17 @@ def optimize_model(memory):
     cond = TD_errors < beta
     TD_errors = torch.where(cond, 0.5 * TD_errors ** 2 / beta, TD_errors - 0.5 * beta)
     
-    # update errors in our td_error IRM
+    # update errors in our td_error IRM for both HIGHEST_ERROR or HIGHEST_ERROR_PER 
+    # since they both use optimize_error to update their IRM
     if((HIGHEST_ERROR or HIGHEST_ERROR_PER) and not memory.push_during_optimize):
-        print("Performed Update with Highest Error IRM")
+        print("Updated errors in IRM with the newest errors we calculated.")
         memory.update_errors_in_memory(positions, TD_errors)
 
     loss = TD_errors.mean()
 
     # Push sample with higest TD_error to IRM
     # only ORM should do this
-    if memory.push_during_optimize:
+    if memory.push_during_optimize and (HIGHEST_ERROR or HIGHEST_ERROR_PER):
         abs_TD_errors = torch.abs(TD_errors)
         highest_TD_error_index = torch.argmax(abs_TD_errors)
         highest_TD_error = torch.max(abs_TD_errors).item()
@@ -211,8 +214,8 @@ def optimize_model_prio(memory):
     TD_errors = torch.where(cond, 0.5 * TD_errors ** 2 / beta, TD_errors - 0.5 * beta)
 
 
-    # Push sample with higest TD_error to IRM
-    if memory.push_during_optimize:
+    # Push sample with higest TD_error to IRM (Highest Error Model)
+    if memory.push_during_optimize and (HIGHEST_ERROR or HIGHEST_ERROR_PER):
         abs_TD_errors = torch.abs(TD_errors)
         highest_TD_error_index = torch.argmax(abs_TD_errors)
         highest_TD_error = torch.max(abs_TD_errors).item()
@@ -226,16 +229,33 @@ def optimize_model_prio(memory):
         
         memory.latest_max_TD_error = highest_TD_error
 
+        
+        memory.latest_max_TD_error = highest_TD_error
+    
     weighted_loss = importance * TD_errors
+    # detaches updated weights (dosen't detach loss), updated weights will be converted to list to prioritize,
+    # so dosen't make sense to backpropagate
+    updated_weights = (weighted_loss + 1e-6).data.cpu().detach().numpy()
+    memory.set_priorities(positions, updated_weights.flatten().tolist())
+
+    # Push sample with higest TD_error * importance to IRM (PRIORITIZED_IRB)
+    if memory.push_during_optimize and PRIORITIZED_IRB:
+        abs_prio_TD_errors = torch.abs(weighted_loss + 1e-6)
+        highest_prio_TD_error_index = torch.argmax(abs_prio_TD_errors)
+        highest_prio_TD_error = torch.max(abs_prio_TD_errors).item()
+        
+        TD_sample = tmp[highest_prio_TD_error_index]
+        # Garanteed push every IRM_PUSH_FREQ
+        if steps_done % IRM_PUSH_FREQ:
+            IRM.push(highest_prio_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+        elif highest_prio_TD_error > memory.latest_max_TD_error:
+            IRM.push(highest_prio_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+
     logger.logkv("weighted_loss", weighted_loss.flatten().tolist())
 
     loss = weighted_loss.mean()
     logger.logkv("loss", loss.flatten().tolist())
     
-    # detaches updated weights (dosen't detach loss), updated weights will be converted to list to prioritize,
-    # so dosen't make sense to backpropagate
-    updated_weights = (weighted_loss + 1e-6).data.cpu().detach().numpy()
-    memory.set_priorities(positions, updated_weights.flatten().tolist())
     optimizer.zero_grad()
     loss.backward()
     for param in policy_net.parameters():
@@ -322,9 +342,8 @@ def train(env, n_episodes, render=False):
             logger.dumpkvs()
 
         if episode % 100 == 0:
-            model_name = "dqn_pong_final_test_per_model"
-            print("Saved Model as : {}".format(model_name))
-            torch.save(policy_net, model_name)
+            print("Saved Model as : {}".format(MODEL_NAME))
+            torch.save(policy_net, MODEL_NAME)
     env.close()
     return
 
@@ -381,14 +400,19 @@ if __name__ == '__main__':
     IRM_UPDATES_FREQ = 200
     IRM_PUSH_FREQ = 100
 
+    # Save Configurations
+    RESULTS_DIR = "results"
+    MODEL_NAME = "result_model"
+
     # Model Flags 
     ORM_PER = False
     IRM_PER = False
 
     # Model Configurations
     RANDOM_IRM = False
-    HIGHEST_ERROR = True
+    HIGHEST_ERROR = False
     HIGHEST_ERROR_PER = False
+    PRIORITIZED_IRB = True
 
     if RANDOM_IRM:
         print("Model Configuration: RANDOM_IRM")
@@ -400,12 +424,16 @@ if __name__ == '__main__':
         print("Model Configuration: HIGHEST_ERROR with PER ORM")
         ORM_PER = True
     
+    if PRIORITIZED_IRB:
+        print("Model Configuration: PRIORITIZED_IRB")
+        ORM_PER = True
+        IRM_PER = True
+    
     episode_reward_history = []
 
-    # Setup logging for the model
-    dir = "debug"
 
-    logger = configure(dir)
+    # Setup logging for the model
+    logger = configure(RESULTS_DIR)
     logger.set_level(DEBUG)
 
     # create environment
@@ -432,19 +460,19 @@ if __name__ == '__main__':
     if(IRM_PER):
         print("Initialized IRM with Prioritized Experience Replay")
         IRM = PrioritizedReplay(IRM_MEMORY_SIZE)
-    # When running the highest error model, activate push_during_optimize for the ORM and replace IRM with
-    # a different memory class that replaces lowest td_error samples with highest td_error samples when full
+
     if(HIGHEST_ERROR or HIGHEST_ERROR_PER):
         ORM.push_during_optimize = True
         IRM = HighestErrorMemory(IRM_MEMORY_SIZE)
-
+    if(PRIORITIZED_IRB):
+        ORM.push_during_optimize = True
+        IRM = PrioritizedIRBMemory(IRM_MEMORY_SIZE)
 
     # train model
     save_params()
     train(env, 4000000, RENDER)
 
     # Load and test model
-    #
     #visualize(env, 1, policy_net, render=True)
 
 
