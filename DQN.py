@@ -313,7 +313,7 @@ def train(env, n_episodes, render=False):
                 else:
                     optimize_model(ORM)
                 
-                if steps_done % IRM_UPDATES_FREQ == 0:
+                if steps_done % IRM_UPDATES_FREQ == 0 and not NO_IRM:
                     if IRM_PER:
                         optimize_model_prio(IRM)
                     else:
@@ -401,18 +401,22 @@ if __name__ == '__main__':
     IRM_PUSH_FREQ = 100
 
     # Save Configurations
-    RESULTS_DIR = "results"
-    MODEL_NAME = "result_model"
+    RESULTS_DIR = "results_debug"
+    MODEL_NAME = "result_model_debug"
 
     # Model Flags 
     ORM_PER = False
     IRM_PER = False
 
     # Model Configurations
+    NO_IRM = True
     RANDOM_IRM = False
     HIGHEST_ERROR = False
     HIGHEST_ERROR_PER = False
-    PRIORITIZED_IRB = True
+    PRIORITIZED_IRB = False
+
+    # DUELING DQN
+    DUELING_DQN = False
 
     if RANDOM_IRM:
         print("Model Configuration: RANDOM_IRM")
@@ -442,6 +446,11 @@ if __name__ == '__main__':
     # create networks
     policy_net = DQNbn(n_actions=env.action_space.n).to(device)
     target_net = DQNbn(n_actions=env.action_space.n).to(device)
+
+    if(DUELING_DQN):
+        policy_net = DuelingDQN(env.action_space.n, "cuda").to(device)
+        target_net = DuelingDQN(env.action_space.n, "cuda").to(device)
+
     #policy_net = torch.load("dqn_pong_model")
     target_net.load_state_dict(policy_net.state_dict())
 
@@ -453,6 +462,10 @@ if __name__ == '__main__':
     # initialize replay memory
     ORM = ReplayMemory(ORM_MEMORY_SIZE)
     IRM = ReplayMemory(IRM_MEMORY_SIZE)
+    
+    if(NO_IRM):
+        print("Initialized with no IRM, ie. standard experience replay.")
+        IRM = None
     
     if(ORM_PER):
         print("Initialized ORM with Prioritized Experience Replay")
