@@ -43,13 +43,13 @@ def save_params():
     'TARGET_UPDATE': TARGET_UPDATE,
     'lr': lr,
     'INITIAL_MEMORY': INITIAL_MEMORY,
-    'IRM_MEM_SIZE': IRM_MEMORY_SIZE,
-    'ORM_MEM_SIZE': ORM_MEMORY_SIZE,
-    'IRM_UPDATES_FREQ': IRM_UPDATES_FREQ,
-    'IRM_PUSH_FREQ': IRM_PUSH_FREQ
+    'IRB_MEM_SIZE': IRB_MEMORY_SIZE,
+    'ORB_MEM_SIZE': ORB_MEMORY_SIZE,
+    'IRB_UPDATES_FREQ': IRB_UPDATES_FREQ,
+    'IRB_PUSH_FREQ': IRB_PUSH_FREQ
     })
 
-    with open('parameters.json', 'w+') as json_out:
+    with open(RESULTS_DIR + '.json', 'w+') as json_out:
         json.dump(data, json_out)
 
 def select_action(state):
@@ -66,10 +66,10 @@ def select_action(state):
     steps_done += 1
 
     # Increase the beta variable torwards 1 during training. The beta variable determines priority importance. 
-    if ORM_PER:
-        ORM.beta = min(INITIAL_BETA + (1 - 1 * math.exp(-1. * steps_done / EPS_DECAY)), 1)
-    if IRM_PER:
-        IRM.beta = min(INITIAL_BETA + (1 - 1 * math.exp(-1. * steps_done / EPS_DECAY)), 1)
+    if ORB_PER:
+        ORB.beta = min(INITIAL_BETA + (1 - 1 * math.exp(-1. * steps_done / EPS_DECAY)), 1)
+    if IRB_PER:
+        IRB.beta = min(INITIAL_BETA + (1 - 1 * math.exp(-1. * steps_done / EPS_DECAY)), 1)
 
     if sample > eps_threshold:
         with torch.no_grad():
@@ -82,7 +82,7 @@ def optimize_model(memory):
     if len(memory) < BATCH_SIZE:
         return
     
-    # If we are running a highest error model and we are not the ORM (who have the push_during_optimize flag set to true), i.e. we are running HighestErrorMemory
+    # If we are running a highest error model and we are not the ORB (who have the push_during_optimize flag set to true), i.e. we are running HighestErrorMemory
     if (HIGHEST_ERROR or HIGHEST_ERROR_PER) and not memory.push_during_optimize:
         transitions, positions = memory.sample(BATCH_SIZE)
     else:
@@ -131,16 +131,16 @@ def optimize_model(memory):
     cond = TD_errors < beta
     TD_errors = torch.where(cond, 0.5 * TD_errors ** 2 / beta, TD_errors - 0.5 * beta)
     
-    # update errors in our td_error IRM for both HIGHEST_ERROR or HIGHEST_ERROR_PER 
-    # since they both use optimize_error to update their IRM
+    # update errors in our td_error IRB for both HIGHEST_ERROR or HIGHEST_ERROR_PER 
+    # since they both use optimize_error to update their IRB
     if((HIGHEST_ERROR or HIGHEST_ERROR_PER) and not memory.push_during_optimize):
-        print("Updated errors in IRM with the newest errors we calculated.")
+        print("Updated errors in IRB with the newest errors we calculated.")
         memory.update_errors_in_memory(positions, TD_errors)
 
     loss = TD_errors.mean()
 
-    # Push sample with higest TD_error to IRM
-    # only ORM should do this
+    # Push sample with higest TD_error to IRB
+    # only ORB should do this
     if memory.push_during_optimize and (HIGHEST_ERROR or HIGHEST_ERROR_PER):
         abs_TD_errors = torch.abs(TD_errors)
         highest_TD_error_index = torch.argmax(abs_TD_errors)
@@ -148,11 +148,11 @@ def optimize_model(memory):
 
         TD_sample = tmp[highest_TD_error_index]
 
-        # guaranteed push every IRM_PUSH_FREQ
-        if steps_done % IRM_PUSH_FREQ:
-            IRM.push(highest_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+        # guaranteed push every IRB_PUSH_FREQ
+        if steps_done % IRB_PUSH_FREQ:
+            IRB.push(highest_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
         elif highest_TD_error > memory.latest_max_TD_error:
-            IRM.push(highest_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+            IRB.push(highest_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
         
         memory.latest_max_TD_error = highest_TD_error
     
@@ -214,18 +214,18 @@ def optimize_model_prio(memory):
     TD_errors = torch.where(cond, 0.5 * TD_errors ** 2 / beta, TD_errors - 0.5 * beta)
 
 
-    # Push sample with higest TD_error to IRM (Highest Error Model)
+    # Push sample with higest TD_error to IRB (Highest Error Model)
     if memory.push_during_optimize and (HIGHEST_ERROR or HIGHEST_ERROR_PER):
         abs_TD_errors = torch.abs(TD_errors)
         highest_TD_error_index = torch.argmax(abs_TD_errors)
         highest_TD_error = torch.max(abs_TD_errors).item()
         
         TD_sample = tmp[highest_TD_error_index]
-        # Garanteed push every IRM_PUSH_FREQ
-        if steps_done % IRM_PUSH_FREQ:
-            IRM.push(highest_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+        # Garanteed push every IRB_PUSH_FREQ
+        if steps_done % IRB_PUSH_FREQ:
+            IRB.push(highest_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
         elif highest_TD_error > memory.latest_max_TD_error:
-            IRM.push(highest_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+            IRB.push(highest_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
         
         memory.latest_max_TD_error = highest_TD_error
 
@@ -238,18 +238,18 @@ def optimize_model_prio(memory):
     updated_weights = (weighted_loss + 1e-6).data.cpu().detach().numpy()
     memory.set_priorities(positions, updated_weights.flatten().tolist())
 
-    # Push sample with higest TD_error * importance to IRM (PRIORITIZED_IRB)
+    # Push sample with higest TD_error * importance to IRB (PRIORITIZED_IRB)
     if memory.push_during_optimize and PRIORITIZED_IRB:
         abs_prio_TD_errors = torch.abs(weighted_loss + 1e-6)
         highest_prio_TD_error_index = torch.argmax(abs_prio_TD_errors)
         highest_prio_TD_error = torch.max(abs_prio_TD_errors).item()
         
         TD_sample = tmp[highest_prio_TD_error_index]
-        # Garanteed push every IRM_PUSH_FREQ
-        if steps_done % IRM_PUSH_FREQ:
-            IRM.push(highest_prio_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+        # Garanteed push every IRB_PUSH_FREQ
+        if steps_done % IRB_PUSH_FREQ:
+            IRB.push(highest_prio_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
         elif highest_prio_TD_error > memory.latest_max_TD_error:
-            IRM.push(highest_prio_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
+            IRB.push(highest_prio_TD_error, TD_sample.state, TD_sample.action, TD_sample.next_state, TD_sample.reward)
 
     logger.logkv("weighted_loss", weighted_loss.flatten().tolist())
 
@@ -293,31 +293,31 @@ def train(env, n_episodes, render=False):
             # Push the memory to the list
             #memory.push(state, action.to('cuda'), next_state, reward.to('cuda'))
 
-            # Push memory to ORM every step
-            # Memories are pushed to IRM every nth step in RANDOM IRM model
-            # In other models, memories are pushed to IRM after TD_error calculations in prio_optimize_model and optimize_model
-            ORM.push(state, action.to('cuda'), next_state, reward.to('cuda'))
-            if(RANDOM_IRM):
-                if steps_done % IRM_PUSH_FREQ == 0:
-                    IRM.push(state, action.to('cuda'), next_state, reward.to('cuda'))
+            # Push memory to ORB every step
+            # Memories are pushed to IRB every nth step in RANDOM IRB model
+            # In other models, memories are pushed to IRB after TD_error calculations in prio_optimize_model and optimize_model
+            ORB.push(state, action.to('cuda'), next_state, reward.to('cuda'))
+            if(RANDOM_IRB):
+                if steps_done % IRB_PUSH_FREQ == 0:
+                    IRB.push(state, action.to('cuda'), next_state, reward.to('cuda'))
             
             state = next_state
 
             # Optimize the model after replay memory have been filled to INITIAL_MEMORY
-            # Implement INITIAL_MEMORY for IRM? atm we implicitly it have reached a batch size worth of memories
+            # Implement INITIAL_MEMORY for IRB? atm we implicitly it have reached a batch size worth of memories
             if steps_done > INITIAL_MEMORY:
-                # ORM will be used for an gradient update every step, IRM
-                # will be used every IRM_UPDATES_FREQ
-                if ORM_PER:
-                    optimize_model_prio(ORM)
+                # ORB will be used for an gradient update every step, IRB
+                # will be used every IRB_UPDATES_FREQ
+                if ORB_PER:
+                    optimize_model_prio(ORB)
                 else:
-                    optimize_model(ORM)
+                    optimize_model(ORB)
                 
-                if steps_done % IRM_UPDATES_FREQ == 0 and not NO_IRM:
-                    if IRM_PER:
-                        optimize_model_prio(IRM)
+                if steps_done % IRB_UPDATES_FREQ == 0 and not NO_IRB:
+                    if IRB_PER:
+                        optimize_model_prio(IRB)
                     else:
-                        optimize_model(IRM)
+                        optimize_model(IRB)
                 
                 if steps_done % TARGET_UPDATE == 0:
                     target_net.load_state_dict(policy_net.state_dict())
@@ -394,23 +394,24 @@ if __name__ == '__main__':
     lr = 1e-4
     #INITIAL_MEMORY = 32
     INITIAL_MEMORY = 10000
-    ORM_MEMORY_SIZE = 10 * INITIAL_MEMORY
-    IRM_MEMORY_SIZE = 10 * INITIAL_MEMORY
+    ORB_MEMORY_SIZE = 10 * INITIAL_MEMORY
+    IRB_MEMORY_SIZE = 10 * INITIAL_MEMORY
     DEBUG = 10
-    IRM_UPDATES_FREQ = 200
-    IRM_PUSH_FREQ = 100
+    IRB_UPDATES_FREQ = 200
+    IRB_PUSH_FREQ = 100
 
     # Save Configurations
     RESULTS_DIR = "results_debug"
     MODEL_NAME = "result_model_debug"
 
-    # Model Flags 
-    ORM_PER = False
-    IRM_PER = False
+    # Model Flags     
+    # Has two effects. 1. Sets the beta variable for PER. 2. Does so prio_optimize_model is used rather than optimize_model.
+    ORB_PER = False
+    IRB_PER = False
 
     # Model Configurations
-    NO_IRM = True
-    RANDOM_IRM = False
+    NO_IRB = True
+    RANDOM_IRB = False
     HIGHEST_ERROR = False
     HIGHEST_ERROR_PER = False
     PRIORITIZED_IRB = False
@@ -418,20 +419,20 @@ if __name__ == '__main__':
     # DUELING DQN
     DUELING_DQN = False
 
-    if RANDOM_IRM:
-        print("Model Configuration: RANDOM_IRM")
+    if RANDOM_IRB:
+        print("Model Configuration: RANDOM_IRB")
     
     if HIGHEST_ERROR:
         print("Model Configuration: HIGHEST_ERROR")
 
     if HIGHEST_ERROR_PER:
-        print("Model Configuration: HIGHEST_ERROR with PER ORM")
-        ORM_PER = True
+        print("Model Configuration: HIGHEST_ERROR with PER ORB")
+        ORB_PER = True
     
     if PRIORITIZED_IRB:
         print("Model Configuration: PRIORITIZED_IRB")
-        ORM_PER = True
-        IRM_PER = True
+        ORB_PER = True
+        IRB_PER = True
     
     episode_reward_history = []
 
@@ -459,27 +460,28 @@ if __name__ == '__main__':
 
     steps_done = 0
 
-    # initialize replay memory
-    ORM = ReplayMemory(ORM_MEMORY_SIZE)
-    IRM = ReplayMemory(IRM_MEMORY_SIZE)
+    # Default ORB and IRB is standard experience replay. 
+    # Changed during configurations to fit each incentive replay model variant. 
+    ORB = ReplayMemory(ORB_MEMORY_SIZE)
+    IRB = ReplayMemory(IRB_MEMORY_SIZE)
     
-    if(NO_IRM):
-        print("Initialized with no IRM, ie. standard experience replay.")
-        IRM = None
+    if(NO_IRB):
+        print("Initialized with no IRB, ie. standard experience replay.")
+        IRB = None
     
-    if(ORM_PER):
-        print("Initialized ORM with Prioritized Experience Replay")
-        ORM = PrioritizedReplay(ORM_MEMORY_SIZE)
-    if(IRM_PER):
-        print("Initialized IRM with Prioritized Experience Replay")
-        IRM = PrioritizedReplay(IRM_MEMORY_SIZE)
+    if(ORB_PER):
+        print("Initialized ORB with Prioritized Experience Replay")
+        ORB = PrioritizedReplay(ORB_MEMORY_SIZE)
+    if(IRB_PER):
+        print("Initialized IRB with Prioritized Experience Replay")
+        IRB = PrioritizedReplay(IRB_MEMORY_SIZE)
 
     if(HIGHEST_ERROR or HIGHEST_ERROR_PER):
-        ORM.push_during_optimize = True
-        IRM = HighestErrorMemory(IRM_MEMORY_SIZE)
+        ORB.push_during_optimize = True
+        IRB = HighestErrorMemory(IRB_MEMORY_SIZE)
     if(PRIORITIZED_IRB):
-        ORM.push_during_optimize = True
-        IRM = PrioritizedIRBMemory(IRM_MEMORY_SIZE)
+        ORB.push_during_optimize = True
+        IRB = PrioritizedIRBMemory(IRB_MEMORY_SIZE)
 
     # train model
     save_params()
