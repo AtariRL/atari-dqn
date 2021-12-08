@@ -134,7 +134,6 @@ def optimize_model(memory):
     # update errors in our td_error IRB for both HIGHEST_ERROR or HIGHEST_ERROR_PER 
     # since they both use optimize_error to update their IRB
     if((HIGHEST_ERROR or HIGHEST_ERROR_PER) and not memory.push_during_optimize):
-        print("Updated errors in IRB with the newest errors we calculated.")
         memory.update_errors_in_memory(positions, TD_errors)
 
     loss = TD_errors.mean()
