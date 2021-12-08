@@ -390,19 +390,19 @@ if __name__ == '__main__':
     EPS_DECAY = 1000000
     INITIAL_BETA = 0.4
     TARGET_UPDATE = 1000
-    RENDER = True
+    RENDER = False
     lr = 1e-4
     #INITIAL_MEMORY = 32
     INITIAL_MEMORY = 10000
     ORB_MEMORY_SIZE = 10 * INITIAL_MEMORY
-    IRB_MEMORY_SIZE = 10 * INITIAL_MEMORY
+    IRB_MEMORY_SIZE = 10000
     DEBUG = 10
     IRB_UPDATES_FREQ = 200
     IRB_PUSH_FREQ = 100
 
     # Save Configurations
-    RESULTS_DIR = "results_Random_Breakout_Dueling"
-    MODEL_NAME = "result_model_Random_Brekout_Dueling"
+    RESULTS_DIR = "irb10000-results"
+    MODEL_NAME = "irb10000_model"
 
     # Initialize Model Flags     
     # Has two effects. 1. Sets the beta variable for PER. 2. Does so prio_optimize_model is used rather than optimize_model.
@@ -413,8 +413,8 @@ if __name__ == '__main__':
     # Model Configurations
     # No IRB if you don't want to test with any incentive replay buffer i.e. standard DQN or Dueling DQN
     NO_IRB = False
-    RANDOM_IRB = True
-    HIGHEST_ERROR = False
+    RANDOM_IRB = False
+    HIGHEST_ERROR = True
     HIGHEST_ERROR_PER = False
     PRIORITIZED_IRB = False
 
@@ -444,7 +444,7 @@ if __name__ == '__main__':
     logger.set_level(DEBUG)
 
     # create environment
-    env = gym.make("BreakoutNoFrameskip-v4")
+    env = gym.make("PongNoFrameskip-v4")
     env = make_env(env)
     # create networks
     policy_net = DQNbn(n_actions=env.action_space.n).to(device)
