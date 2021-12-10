@@ -133,8 +133,8 @@ def optimize_model(memory):
     
     # update errors in our td_error IRB for both HIGHEST_ERROR or HIGHEST_ERROR_PER 
     # since they both use optimize_error to update their IRB
+    # Updated errors in IRB with the newest errors we calculated.
     if((HIGHEST_ERROR or HIGHEST_ERROR_PER) and not memory.push_during_optimize):
-        print("Updated errors in IRB with the newest errors we calculated.")
         memory.update_errors_in_memory(positions, TD_errors)
 
     loss = TD_errors.mean()
@@ -401,8 +401,8 @@ if __name__ == '__main__':
     IRB_PUSH_FREQ = 100
 
     # Save Configurations
-    RESULTS_DIR = "results_Random_Breakout_Dueling"
-    MODEL_NAME = "result_model_Random_Brekout_Dueling"
+    RESULTS_DIR = "results_HE_Spaceinvader_Dueling"
+    MODEL_NAME = "result_model_HE_Spaceinvaders_Dueling"
 
     # Initialize Model Flags     
     # Has two effects. 1. Sets the beta variable for PER. 2. Does so prio_optimize_model is used rather than optimize_model.
@@ -413,8 +413,8 @@ if __name__ == '__main__':
     # Model Configurations
     # No IRB if you don't want to test with any incentive replay buffer i.e. standard DQN or Dueling DQN
     NO_IRB = False
-    RANDOM_IRB = True
-    HIGHEST_ERROR = False
+    RANDOM_IRB = False
+    HIGHEST_ERROR = True
     HIGHEST_ERROR_PER = False
     PRIORITIZED_IRB = False
 
@@ -444,7 +444,7 @@ if __name__ == '__main__':
     logger.set_level(DEBUG)
 
     # create environment
-    env = gym.make("BreakoutNoFrameskip-v4")
+    env = gym.make("SpaceInvadersNoFrameskip-v4")
     env = make_env(env)
     # create networks
     policy_net = DQNbn(n_actions=env.action_space.n).to(device)
