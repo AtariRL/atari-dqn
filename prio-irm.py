@@ -415,6 +415,7 @@ if __name__ == '__main__':
     RANDOM_IRB = False
     HIGHEST_ERROR = False
     PRIORITIZED_IRB = True
+    HIGHEST_ERROR_PER = False
 
     # DUELING DQN
     DUELING_DQN = False
