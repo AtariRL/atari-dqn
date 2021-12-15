@@ -270,7 +270,7 @@ def get_state(obs):
 
 def train(env, n_episodes, render=False):
     start_time = time.perf_counter()
-    #episode_size = 0
+    
     for episode in range(n_episodes):
         obs = env.reset()
         state = get_state(obs)
@@ -286,12 +286,9 @@ def train(env, n_episodes, render=False):
             total_reward += reward
 
             if done and info["ale.lives"] == 0:
-                #print("episode size was " + str(episode_size))
-                #episode_size = 0
                 break
             else:
                 next_state = get_state(obs)
-                #episode_size += 1
 
                 
 
@@ -327,7 +324,6 @@ def train(env, n_episodes, render=False):
                     target_net.load_state_dict(policy_net.state_dict())
 
             if done and info["ale.lives"] == 0:
-                #episode_size = 0
                 break
         
         
