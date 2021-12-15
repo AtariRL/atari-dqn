@@ -269,6 +269,7 @@ def get_state(obs):
 
 def train(env, n_episodes, render=False):
     start_time = time.perf_counter()
+    
     for episode in range(n_episodes):
         obs = env.reset()
         state = get_state(obs)
@@ -283,18 +284,18 @@ def train(env, n_episodes, render=False):
 
             total_reward += reward
 
-            if not done:
-                next_state = get_state(obs)
-            else:
+            if done and info["ale.lives"] == 0:
                 break
+            else:
+                next_state = get_state(obs)
+
+                
 
             reward = torch.tensor([reward], device=device)
-            # Push the memory to the list
-            #memory.push(state, action.to('cuda'), next_state, reward.to('cuda'))
 
             # Push memory to ORB every step
             # Memories are pushed to IRB every nth step in RANDOM IRB model
-            # In other models, memories are pushed to IRB after TD_error calculations in prio_optimize_model and optimize_model
+            # In other models, memories are pushed to IRB after TD_error calculations in optimize_model_prio and optimize_model
             ORB.push(state, action.to('cuda'), next_state, reward.to('cuda'))
             if(RANDOM_IRB):
                 if steps_done % IRB_PUSH_FREQ == 0:
@@ -312,7 +313,7 @@ def train(env, n_episodes, render=False):
                 else:
                     optimize_model(ORB)
                 
-                if steps_done % IRB_UPDATES_FREQ == 0 and not NO_IRB:
+                if steps_done % IRB_UPDATES_FREQ == 0 and not (IRB_PER or HIGHEST_ERROR or PRIORITIZED_IRB):
                     if IRB_PER:
                         optimize_model_prio(IRB)
                     else:
@@ -320,15 +321,16 @@ def train(env, n_episodes, render=False):
                 
                 if steps_done % TARGET_UPDATE == 0:
                     target_net.load_state_dict(policy_net.state_dict())
-            
-            # Calculate Running Reward to check if solved
-            episode_reward_history.append(total_reward)
-            if len(episode_reward_history) > 100:
-                del episode_reward_history[:1]
-            running_reward = np.mean(episode_reward_history)
 
-            if done:
+            if done and info["ale.lives"] == 0:
                 break
+        
+        
+        # Calculate Running Reward to check if solved
+        episode_reward_history.append(total_reward)
+        if len(episode_reward_history) > 100:
+            del episode_reward_history[:1]
+        running_reward = np.mean(episode_reward_history)
 
         if episode % 1 == 0:
             logger.logkv("episode_reward", total_reward)
@@ -388,12 +390,12 @@ if __name__ == '__main__':
     EPS_END = 0.02
     EPS_DECAY = 1000000
     INITIAL_BETA = 0.4
-    TARGET_UPDATE = 1000
+    TARGET_UPDATE = 10000
     RENDER = False
     lr = 1e-4
     #INITIAL_MEMORY = 32
-    INITIAL_MEMORY = 10000
-    ORB_MEMORY_SIZE = 10 * INITIAL_MEMORY
+    INITIAL_MEMORY = 50000
+    ORB_MEMORY_SIZE = 2 * INITIAL_MEMORY
     IRB_MEMORY_SIZE = 10000
     DEBUG = 10
     IRB_UPDATES_FREQ = 200
