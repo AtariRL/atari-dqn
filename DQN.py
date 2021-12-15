@@ -391,11 +391,11 @@ if __name__ == '__main__':
     EPS_END = 0.02
     EPS_DECAY = 1000000
     INITIAL_BETA = 0.4
-    TARGET_UPDATE = 1000 # should be tried to change to 10,000
+    TARGET_UPDATE = 10000
     RENDER = True
     lr = 1e-4
-    #INITIAL_MEMORY = 32
-    INITIAL_MEMORY = 10000 # should be tried to change to 50,000
+
+    INITIAL_MEMORY = 50000
     ORB_MEMORY_SIZE = 100000
     IRB_MEMORY_SIZE = 100000
     DEBUG = 10
