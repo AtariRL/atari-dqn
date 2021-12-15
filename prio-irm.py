@@ -396,44 +396,37 @@ if __name__ == '__main__':
     ORB_MEMORY_SIZE = 10 * INITIAL_MEMORY
     IRB_MEMORY_SIZE = 10 * INITIAL_MEMORY
     DEBUG = 10
-    IRB_UPDATES_FREQ = 500
+    IRB_UPDATES_FREQ = 50
     IRB_PUSH_FREQ = 100
 
     # Save Configurations
-    RESULTS_DIR = "breakout-ufreq-500-results"
-    MODEL_NAME = "breakout_ufreq_500_model"
+    RESULTS_DIR = "Pong-prio-irm-results"
+    MODEL_NAME = "pong_prio_irm_model"
 
     # Initialize Model Flags     
     # Has two effects. 1. Sets the beta variable for PER. 2. Does so prio_optimize_model is used rather than optimize_model.
     # Will be changed automatically depending on the model configuration flag
     ORB_PER = False
-    IRB_PER = False
+    IRB_PER = True
 
     # Model Configurations
     # No IRB if you don't want to test with any incentive replay buffer i.e. standard DQN or Dueling DQN
     NO_IRB = False
     RANDOM_IRB = False
-    HIGHEST_ERROR = True
-    HIGHEST_ERROR_PER = False
-    PRIORITIZED_IRB = False
+    HIGHEST_ERROR = False
+    PRIORITIZED_IRB = True
 
     # DUELING DQN
-    DUELING_DQN = True
+    DUELING_DQN = False
 
     if RANDOM_IRB:
         print("Model Configuration: RANDOM_IRB")
     
     if HIGHEST_ERROR:
         print("Model Configuration: HIGHEST_ERROR")
-
-    if HIGHEST_ERROR_PER:
-        print("Model Configuration: HIGHEST_ERROR with PER ORB")
-        ORB_PER = True
     
     if PRIORITIZED_IRB:
         print("Model Configuration: PRIORITIZED_IRB")
-        ORB_PER = True
-        IRB_PER = True
     
     episode_reward_history = []
 
@@ -443,7 +436,7 @@ if __name__ == '__main__':
     logger.set_level(DEBUG)
 
     # create environment
-    env = gym.make("BreakoutNoFrameskip-v4")
+    env = gym.make("PongNoFrameskip-v4")
     env = make_env(env)
     # create networks
     policy_net = DQNbn(n_actions=env.action_space.n).to(device)
@@ -466,21 +459,23 @@ if __name__ == '__main__':
     ORB = ReplayMemory(ORB_MEMORY_SIZE)
     IRB = ReplayMemory(IRB_MEMORY_SIZE)
     
-    if(NO_IRB):
+    if NO_IRB:
         print("Initialized with no IRB, ie. standard experience replay.")
         IRB = None
     
-    if(ORB_PER):
+    if ORB_PER:
         print("Initialized ORB with Prioritized Experience Replay")
         ORB = PrioritizedReplay(ORB_MEMORY_SIZE)
-    if(IRB_PER):
+        
+    if IRB_PER:
         print("Initialized IRB with Prioritized Experience Replay")
         IRB = PrioritizedReplay(IRB_MEMORY_SIZE)
 
-    if(HIGHEST_ERROR or HIGHEST_ERROR_PER):
+    if HIGHEST_ERROR:
         ORB.push_during_optimize = True
         IRB = HighestErrorMemory(IRB_MEMORY_SIZE)
-    if(PRIORITIZED_IRB):
+
+    if PRIORITIZED_IRB:
         ORB.push_during_optimize = True
         IRB = PrioritizedIRBMemory(IRB_MEMORY_SIZE)
 

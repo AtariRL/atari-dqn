@@ -396,12 +396,12 @@ if __name__ == '__main__':
     ORB_MEMORY_SIZE = 10 * INITIAL_MEMORY
     IRB_MEMORY_SIZE = 10 * INITIAL_MEMORY
     DEBUG = 10
-    IRB_UPDATES_FREQ = 200
-    IRB_PUSH_FREQ = 50
+    IRB_UPDATES_FREQ = 50
+    IRB_PUSH_FREQ = 100
 
     # Save Configurations
-    RESULTS_DIR = "pushfreq50-results"
-    MODEL_NAME = "pushfreq50_model"
+    RESULTS_DIR = "Pong-random-irm-results"
+    MODEL_NAME = "pong_random_irm_model"
 
     # Initialize Model Flags     
     # Has two effects. 1. Sets the beta variable for PER. 2. Does so prio_optimize_model is used rather than optimize_model.
@@ -412,13 +412,13 @@ if __name__ == '__main__':
     # Model Configurations
     # No IRB if you don't want to test with any incentive replay buffer i.e. standard DQN or Dueling DQN
     NO_IRB = False
-    RANDOM_IRB = False
-    HIGHEST_ERROR = True
+    RANDOM_IRB = True
+    HIGHEST_ERROR = False
     HIGHEST_ERROR_PER = False
     PRIORITIZED_IRB = False
 
     # DUELING DQN
-    DUELING_DQN = True
+    DUELING_DQN = False
 
     if RANDOM_IRB:
         print("Model Configuration: RANDOM_IRB")

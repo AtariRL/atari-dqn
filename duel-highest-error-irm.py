@@ -396,12 +396,12 @@ if __name__ == '__main__':
     ORB_MEMORY_SIZE = 10 * INITIAL_MEMORY
     IRB_MEMORY_SIZE = 10 * INITIAL_MEMORY
     DEBUG = 10
-    IRB_UPDATES_FREQ = 200
+    IRB_UPDATES_FREQ = 50
     IRB_PUSH_FREQ = 100
 
     # Save Configurations
-    RESULTS_DIR = "x-results"
-    MODEL_NAME = "x_model"
+    RESULTS_DIR = "Pong-duel-he-results"
+    MODEL_NAME = "pong_duel_he_model"
 
     # Initialize Model Flags     
     # Has two effects. 1. Sets the beta variable for PER. 2. Does so prio_optimize_model is used rather than optimize_model.

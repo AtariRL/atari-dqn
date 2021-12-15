@@ -394,14 +394,14 @@ if __name__ == '__main__':
     #INITIAL_MEMORY = 32
     INITIAL_MEMORY = 10000
     ORB_MEMORY_SIZE = 10 * INITIAL_MEMORY
-    IRB_MEMORY_SIZE = 10000
+    IRB_MEMORY_SIZE = 10 * INITIAL_MEMORY
     DEBUG = 10
-    IRB_UPDATES_FREQ = 200
+    IRB_UPDATES_FREQ = 50
     IRB_PUSH_FREQ = 100
 
     # Save Configurations
-    RESULTS_DIR = "irb10000-results"
-    MODEL_NAME = "irb10000_model"
+    RESULTS_DIR = "Pong-he-irm-results"
+    MODEL_NAME = "pong_he_irm_model"
 
     # Initialize Model Flags     
     # Has two effects. 1. Sets the beta variable for PER. 2. Does so prio_optimize_model is used rather than optimize_model.
@@ -418,7 +418,7 @@ if __name__ == '__main__':
     PRIORITIZED_IRB = False
 
     # DUELING DQN
-    DUELING_DQN = True
+    DUELING_DQN = False
 
     if RANDOM_IRB:
         print("Model Configuration: RANDOM_IRB")

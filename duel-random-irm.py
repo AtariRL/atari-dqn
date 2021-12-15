@@ -396,12 +396,12 @@ if __name__ == '__main__':
     ORB_MEMORY_SIZE = 10 * INITIAL_MEMORY
     IRB_MEMORY_SIZE = 10 * INITIAL_MEMORY
     DEBUG = 10
-    IRB_UPDATES_FREQ = 200
+    IRB_UPDATES_FREQ = 50
     IRB_PUSH_FREQ = 100
 
     # Save Configurations
-    RESULTS_DIR = "assault-duel-dqn-random-irm-results"
-    MODEL_NAME = "assault_duel_dqn_random_irm_model"
+    RESULTS_DIR = "Pong-duel-random-irm-results"
+    MODEL_NAME = "pong_duel_random_irm_model"
 
     # Initialize Model Flags     
     # Has two effects. 1. Sets the beta variable for PER. 2. Does so prio_optimize_model is used rather than optimize_model.
@@ -443,7 +443,7 @@ if __name__ == '__main__':
     logger.set_level(DEBUG)
 
     # create environment
-    env = gym.make("AssaultNoFrameskip-v4")
+    env = gym.make("PongNoFrameskip-v4")
     env = make_env(env)
     # create networks
     policy_net = DQNbn(n_actions=env.action_space.n).to(device)

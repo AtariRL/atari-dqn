@@ -396,24 +396,24 @@ if __name__ == '__main__':
     ORB_MEMORY_SIZE = 10 * INITIAL_MEMORY
     IRB_MEMORY_SIZE = 10 * INITIAL_MEMORY
     DEBUG = 10
-    IRB_UPDATES_FREQ = 200
-    IRB_PUSH_FREQ = 50
+    IRB_UPDATES_FREQ = 50
+    IRB_PUSH_FREQ = 100
 
     # Save Configurations
-    RESULTS_DIR = "breakout-pfreq-50-results"
-    MODEL_NAME = "breakout_pfreq_50_model"
+    RESULTS_DIR = "Pong-Duel-Prio-DQN-results"
+    MODEL_NAME = "pong_duel_prio_dqn_model"
 
     # Initialize Model Flags     
     # Has two effects. 1. Sets the beta variable for PER. 2. Does so prio_optimize_model is used rather than optimize_model.
     # Will be changed automatically depending on the model configuration flag
-    ORB_PER = False
+    ORB_PER = True
     IRB_PER = False
 
     # Model Configurations
     # No IRB if you don't want to test with any incentive replay buffer i.e. standard DQN or Dueling DQN
-    NO_IRB = False
+    NO_IRB = True
     RANDOM_IRB = False
-    HIGHEST_ERROR = True
+    HIGHEST_ERROR = False
     HIGHEST_ERROR_PER = False
     PRIORITIZED_IRB = False
 
@@ -443,7 +443,7 @@ if __name__ == '__main__':
     logger.set_level(DEBUG)
 
     # create environment
-    env = gym.make("BreakoutNoFrameskip-v4")
+    env = gym.make("PongNoFrameskip-v4")
     env = make_env(env)
     # create networks
     policy_net = DQNbn(n_actions=env.action_space.n).to(device)
