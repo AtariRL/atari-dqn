@@ -83,7 +83,7 @@ def optimize_model(memory):
         return
     
     # If we are running a highest error model and we are not the ORB (who have the push_during_optimize flag set to true), i.e. we are running HighestErrorMemory
-    if (HIGHEST_ERROR or HIGHEST_ERROR_PER) and not memory.push_during_optimize:
+    if HIGHEST_ERROR and not memory.push_during_optimize:
         transitions, positions = memory.sample(BATCH_SIZE)
     else:
         transitions = memory.sample(BATCH_SIZE)
@@ -134,14 +134,14 @@ def optimize_model(memory):
     # update errors in our td_error IRB for both HIGHEST_ERROR or HIGHEST_ERROR_PER 
     # since they both use optimize_error to update their IRB
     # Updated errors in IRB with the newest errors we calculated.
-    if((HIGHEST_ERROR or HIGHEST_ERROR_PER) and not memory.push_during_optimize):
+    if HIGHEST_ERROR and not memory.push_during_optimize:
         memory.update_errors_in_memory(positions, TD_errors)
 
     loss = TD_errors.mean()
 
     # Push sample with higest TD_error to IRB
     # only ORB should do this
-    if memory.push_during_optimize and (HIGHEST_ERROR or HIGHEST_ERROR_PER):
+    if memory.push_during_optimize and HIGHEST_ERROR:
         abs_TD_errors = torch.abs(TD_errors)
         highest_TD_error_index = torch.argmax(abs_TD_errors)
         highest_TD_error = torch.max(abs_TD_errors).item()
@@ -215,7 +215,7 @@ def optimize_model_prio(memory):
 
 
     # Push sample with higest TD_error to IRB (Highest Error Model)
-    if memory.push_during_optimize and (HIGHEST_ERROR or HIGHEST_ERROR_PER):
+    if memory.push_during_optimize and HIGHEST_ERROR:
         abs_TD_errors = torch.abs(TD_errors)
         highest_TD_error_index = torch.argmax(abs_TD_errors)
         highest_TD_error = torch.max(abs_TD_errors).item()
@@ -296,7 +296,7 @@ def train(env, n_episodes, render=False):
 
             # Push memory to ORB every step
             # Memories are pushed to IRB every nth step in RANDOM IRB model
-            # In other models, memories are pushed to IRB after TD_error calculations in prio_optimize_model and optimize_model
+            # In other models, memories are pushed to IRB after TD_error calculations in optimize_model_prio and optimize_model
             ORB.push(state, action.to('cuda'), next_state, reward.to('cuda'))
             if(RANDOM_IRB):
                 if steps_done % IRB_PUSH_FREQ == 0:
@@ -314,7 +314,7 @@ def train(env, n_episodes, render=False):
                 else:
                     optimize_model(ORB)
                 
-                if steps_done % IRB_UPDATES_FREQ == 0 and not NO_IRB:
+                if steps_done % IRB_UPDATES_FREQ == 0 and not (IRB_PER or HIGHEST_ERROR or PRIORITIZED_IRB):
                     if IRB_PER:
                         optimize_model_prio(IRB)
                     else:
@@ -401,45 +401,24 @@ if __name__ == '__main__':
     DEBUG = 10
     IRB_UPDATES_FREQ = 200
     IRB_PUSH_FREQ = 100
-
-    # Save Configurations
-    RESULTS_DIR = "debug"
-    MODEL_NAME = "debug"
-
-    # Initialize Model Flags     
-    # Has two effects. 1. Sets the beta variable for PER. 2. Does so prio_optimize_model is used rather than optimize_model.
-    # Will be changed automatically depending on the model configuration flag
+    
+    # Global variables for Model Flags     
     ORB_PER = False
     IRB_PER = False
 
+    # Save Configurations
+    RESULTS_DIR = "50000_settings_dueling_breakout"
+    MODEL_NAME = "50000_settings_model_dueling_breakout"
+
     # Model Configurations
-    # No IRB if you don't want to test with any incentive replay buffer i.e. standard DQN or Dueling DQN
-    NO_IRB = True
     RANDOM_IRB = False
     HIGHEST_ERROR = False
-    HIGHEST_ERROR_PER = False
     PRIORITIZED_IRB = False
 
     # DUELING DQN
     DUELING_DQN = True
-
-    if RANDOM_IRB:
-        print("Model Configuration: RANDOM_IRB")
-    
-    if HIGHEST_ERROR:
-        print("Model Configuration: HIGHEST_ERROR")
-
-    if HIGHEST_ERROR_PER:
-        print("Model Configuration: HIGHEST_ERROR with PER ORB")
-        ORB_PER = True
-    
-    if PRIORITIZED_IRB:
-        print("Model Configuration: PRIORITIZED_IRB")
-        ORB_PER = True
-        IRB_PER = True
     
     episode_reward_history = []
-
 
     # Setup logging for the model
     logger = configure(RESULTS_DIR)
@@ -469,21 +448,19 @@ if __name__ == '__main__':
     ORB = ReplayMemory(ORB_MEMORY_SIZE)
     IRB = ReplayMemory(IRB_MEMORY_SIZE)
     
-    if(NO_IRB):
-        print("Initialized with no IRB, ie. standard experience replay.")
-        IRB = None
-    
-    if(ORB_PER):
-        print("Initialized ORB with Prioritized Experience Replay")
+    if ORB_PER:
         ORB = PrioritizedReplay(ORB_MEMORY_SIZE)
-    if(IRB_PER):
-        print("Initialized IRB with Prioritized Experience Replay")
+    
+    if IRB_PER:
         IRB = PrioritizedReplay(IRB_MEMORY_SIZE)
 
-    if(HIGHEST_ERROR or HIGHEST_ERROR_PER):
+    if HIGHEST_ERROR:
         ORB.push_during_optimize = True
         IRB = HighestErrorMemory(IRB_MEMORY_SIZE)
-    if(PRIORITIZED_IRB):
+
+    if PRIORITIZED_IRB:
+        # IRB_PER is set tot rue to make prioritized_IRB use optimize_model_prio for its IRB
+        IRB_PER = True 
         ORB.push_during_optimize = True
         IRB = PrioritizedIRBMemory(IRB_MEMORY_SIZE)
 
