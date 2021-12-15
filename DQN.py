@@ -270,6 +270,7 @@ def get_state(obs):
 
 def train(env, n_episodes, render=False):
     start_time = time.perf_counter()
+    #episode_size = 0
     for episode in range(n_episodes):
         obs = env.reset()
         state = get_state(obs)
@@ -284,14 +285,17 @@ def train(env, n_episodes, render=False):
 
             total_reward += reward
 
-            if not done:
-                next_state = get_state(obs)
-            else:
+            if done and info["ale.lives"] == 0:
+                #print("episode size was " + str(episode_size))
+                #episode_size = 0
                 break
+            else:
+                next_state = get_state(obs)
+                #episode_size += 1
+
+                
 
             reward = torch.tensor([reward], device=device)
-            # Push the memory to the list
-            #memory.push(state, action.to('cuda'), next_state, reward.to('cuda'))
 
             # Push memory to ORB every step
             # Memories are pushed to IRB every nth step in RANDOM IRB model
@@ -321,15 +325,17 @@ def train(env, n_episodes, render=False):
                 
                 if steps_done % TARGET_UPDATE == 0:
                     target_net.load_state_dict(policy_net.state_dict())
-            
-            # Calculate Running Reward to check if solved
-            episode_reward_history.append(total_reward)
-            if len(episode_reward_history) > 100:
-                del episode_reward_history[:1]
-            running_reward = np.mean(episode_reward_history)
 
-            if done:
+            if done and info["ale.lives"] == 0:
+                #episode_size = 0
                 break
+        
+        
+        # Calculate Running Reward to check if solved
+        episode_reward_history.append(total_reward)
+        if len(episode_reward_history) > 100:
+            del episode_reward_history[:1]
+        running_reward = np.mean(episode_reward_history)
 
         if episode % 1 == 0:
             logger.logkv("episode_reward", total_reward)
@@ -389,20 +395,20 @@ if __name__ == '__main__':
     EPS_END = 0.02
     EPS_DECAY = 1000000
     INITIAL_BETA = 0.4
-    TARGET_UPDATE = 1000
+    TARGET_UPDATE = 1000 # should be tried to change to 10,000
     RENDER = True
     lr = 1e-4
     #INITIAL_MEMORY = 32
-    INITIAL_MEMORY = 10000
-    ORB_MEMORY_SIZE = 10 * INITIAL_MEMORY
-    IRB_MEMORY_SIZE = 10 * INITIAL_MEMORY
+    INITIAL_MEMORY = 10000 # should be tried to change to 50,000
+    ORB_MEMORY_SIZE = 100000
+    IRB_MEMORY_SIZE = 100000
     DEBUG = 10
     IRB_UPDATES_FREQ = 200
     IRB_PUSH_FREQ = 100
 
     # Save Configurations
-    RESULTS_DIR = "results_HE_Spaceinvader_Dueling"
-    MODEL_NAME = "result_model_HE_Spaceinvaders_Dueling"
+    RESULTS_DIR = "debug"
+    MODEL_NAME = "debug"
 
     # Initialize Model Flags     
     # Has two effects. 1. Sets the beta variable for PER. 2. Does so prio_optimize_model is used rather than optimize_model.
@@ -412,9 +418,9 @@ if __name__ == '__main__':
 
     # Model Configurations
     # No IRB if you don't want to test with any incentive replay buffer i.e. standard DQN or Dueling DQN
-    NO_IRB = False
+    NO_IRB = True
     RANDOM_IRB = False
-    HIGHEST_ERROR = True
+    HIGHEST_ERROR = False
     HIGHEST_ERROR_PER = False
     PRIORITIZED_IRB = False
 
@@ -444,7 +450,7 @@ if __name__ == '__main__':
     logger.set_level(DEBUG)
 
     # create environment
-    env = gym.make("SpaceInvadersNoFrameskip-v4")
+    env = gym.make("BreakoutNoFrameskip-v4")
     env = make_env(env)
     # create networks
     policy_net = DQNbn(n_actions=env.action_space.n).to(device)
