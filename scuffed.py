@@ -1,4 +1,6 @@
 import subprocess
+import sys
 
-subprocess.run("pip install gym==0.19.0")
+subprocess.check_call([sys.executable, '-m', 'pip', 'install', 
+'gym==0.19.0'])
 subprocess.run("python peter.py")
