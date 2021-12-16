@@ -18,4 +18,4 @@ import subprocess
 #subprocess.run("python /home/atari/atari-dqn/random-irm.py & python /home/atari/atari-dqn/highest-error-irm.py & python /home/atari/atari-dqn/prio-irm.py", shell=True)
 #subprocess.run("python /home/atari/atari-dqn/duel-random-irm.py & python /home/atari/atari-dqn/duel-highest-error-irm.py & python /home/atari/atari-dqn/duel-prio-irm.py", shell=True)
 
-subprocess.run("python /home/atari/atari-dqn/duel-prio-dqn.py & python /home/atari/atari-dqn/prio-irm.py & python /home/atari/atari-dqn/prio-dqn.py & python /home/atari/atari-dqn/duel-prio-irm.py", shell=True)
+subprocess.run("python duel-prio-dqn.py & python prio-irm.py & python prio-dqn.py & python duel-prio-irm.py", shell=True)
