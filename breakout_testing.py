@@ -284,7 +284,7 @@ def train(env, n_episodes, render=False):
 
             total_reward += reward
 
-            if done and info["ale.lives"] == 0:
+            if done and env.ale.lives() == 0:
                 break
             else:
                 next_state = get_state(obs)
@@ -488,8 +488,6 @@ if __name__ == '__main__':
 
     # train model
     save_params()
-    print("initalizing 10 sec")
-    time.sleep(10)
     train(env, 4000000, RENDER)
 
     # Load and test model
