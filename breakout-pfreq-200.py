@@ -341,14 +341,14 @@ def train(env, n_episodes, render=False):
             logger.logkv("episode time", average_episode_time)
             logger.dumpkvs()
 
-        if episode % 100 == 0:
+        if episode % 1000 == 0:
             print("Saved Model as : {}".format(MODEL_NAME))
             torch.save(policy_net, MODEL_NAME)
     env.close()
     return
 
 def visualize(env, n_episodes, policy, render=True):
-    env = gym.wrappers.Monitor(env, './videos/' + 'dqn_breakout_video', force=True)
+    env = gym.wrappers.Monitor(env, './videos/' + 'dqn_RoadRunner_video', force=True)
     for episode in range(n_episodes):
         obs = env.reset()
         state = get_state(obs)
@@ -401,8 +401,8 @@ if __name__ == '__main__':
     IRB_PUSH_FREQ = 200
 
     # Save Configurations
-    RESULTS_DIR = "breakout-pfreq-200-results"
-    MODEL_NAME = "breakout_pfreq_200_model"
+    RESULTS_DIR = "RoadRunner-pfreq-200-results"
+    MODEL_NAME = "RoadRunner_pfreq_200_model"
 
     # Initialize Model Flags     
     # Has two effects. 1. Sets the beta variable for PER. 2. Does so prio_optimize_model is used rather than optimize_model.
@@ -444,7 +444,7 @@ if __name__ == '__main__':
     logger.set_level(DEBUG)
 
     # create environment
-    env = gym.make("BreakoutNoFrameskip-v4")
+    env = gym.make("RoadRunnerNoFrameskip-v4")
     env = make_env(env)
     # create networks
     policy_net = DQNbn(n_actions=env.action_space.n).to(device)
