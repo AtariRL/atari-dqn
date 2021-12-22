@@ -269,6 +269,7 @@ def get_state(obs):
 
 def train(env, n_episodes, render=False):
     start_time = time.perf_counter()
+    
     for episode in range(n_episodes):
         obs = env.reset()
         state = get_state(obs)
@@ -283,18 +284,18 @@ def train(env, n_episodes, render=False):
 
             total_reward += reward
 
-            if not done:
-                next_state = get_state(obs)
-            else:
+            if done and info["ale.lives"] == 0:
                 break
+            else:
+                next_state = get_state(obs)
+
+                
 
             reward = torch.tensor([reward], device=device)
-            # Push the memory to the list
-            #memory.push(state, action.to('cuda'), next_state, reward.to('cuda'))
 
             # Push memory to ORB every step
             # Memories are pushed to IRB every nth step in RANDOM IRB model
-            # In other models, memories are pushed to IRB after TD_error calculations in prio_optimize_model and optimize_model
+            # In other models, memories are pushed to IRB after TD_error calculations in optimize_model_prio and optimize_model
             ORB.push(state, action.to('cuda'), next_state, reward.to('cuda'))
             if(RANDOM_IRB):
                 if steps_done % IRB_PUSH_FREQ == 0:
@@ -303,7 +304,6 @@ def train(env, n_episodes, render=False):
             state = next_state
 
             # Optimize the model after replay memory have been filled to INITIAL_MEMORY
-            # Implement INITIAL_MEMORY for IRB? atm we implicitly it have reached a batch size worth of memories
             if steps_done > INITIAL_MEMORY:
                 # ORB will be used for an gradient update every step, IRB
                 # will be used every IRB_UPDATES_FREQ
@@ -312,7 +312,7 @@ def train(env, n_episodes, render=False):
                 else:
                     optimize_model(ORB)
                 
-                if steps_done % IRB_UPDATES_FREQ == 0 and not NO_IRB:
+                if steps_done % IRB_UPDATES_FREQ == 0 and not (IRB_PER or HIGHEST_ERROR or PRIORITIZED_IRB):
                     if IRB_PER:
                         optimize_model_prio(IRB)
                     else:
@@ -320,15 +320,16 @@ def train(env, n_episodes, render=False):
                 
                 if steps_done % TARGET_UPDATE == 0:
                     target_net.load_state_dict(policy_net.state_dict())
-            
-            # Calculate Running Reward to check if solved
-            episode_reward_history.append(total_reward)
-            if len(episode_reward_history) > 100:
-                del episode_reward_history[:1]
-            running_reward = np.mean(episode_reward_history)
 
-            if done:
+            if done and info["ale.lives"] == 0:
                 break
+        
+        
+        # Calculate Running Reward to check if solved
+        episode_reward_history.append(total_reward)
+        if len(episode_reward_history) > 100:
+            del episode_reward_history[:1]
+        running_reward = np.mean(episode_reward_history)
 
         if episode % 1 == 0:
             logger.logkv("episode_reward", total_reward)
@@ -340,14 +341,14 @@ def train(env, n_episodes, render=False):
             logger.logkv("episode time", average_episode_time)
             logger.dumpkvs()
 
-        if episode % 100 == 0:
+        if episode % 1000 == 0:
             print("Saved Model as : {}".format(MODEL_NAME))
             torch.save(policy_net, MODEL_NAME)
     env.close()
     return
 
 def visualize(env, n_episodes, policy, render=True):
-    env = gym.wrappers.Monitor(env, './videos/' + 'dqn_breakout_video', force=True)
+    env = gym.wrappers.Monitor(env, './videos/' + 'dqn_RoadRunner_video', force=True)
     for episode in range(n_episodes):
         obs = env.reset()
         state = get_state(obs)
@@ -396,12 +397,12 @@ if __name__ == '__main__':
     ORB_MEMORY_SIZE = 10 * INITIAL_MEMORY
     IRB_MEMORY_SIZE = 10 * INITIAL_MEMORY
     DEBUG = 10
-    IRB_UPDATES_FREQ = 50
-    IRB_PUSH_FREQ = 100
+    IRB_UPDATES_FREQ = 100
+    IRB_PUSH_FREQ = 200
 
     # Save Configurations
-    RESULTS_DIR = "Pong-Duel-DQN-results"
-    MODEL_NAME = "pong_duel_dqn_model"
+    RESULTS_DIR = "RoadRunner-Duel-DQN-results"
+    MODEL_NAME = "RoadRunner_duel_dqn_model"
 
     # Initialize Model Flags     
     # Has two effects. 1. Sets the beta variable for PER. 2. Does so prio_optimize_model is used rather than optimize_model.
@@ -443,7 +444,7 @@ if __name__ == '__main__':
     logger.set_level(DEBUG)
 
     # create environment
-    env = gym.make("PongNoFrameskip-v4")
+    env = gym.make("RoadRunnerNoFrameskip-v4")
     env = make_env(env)
     # create networks
     policy_net = DQNbn(n_actions=env.action_space.n).to(device)
@@ -453,7 +454,7 @@ if __name__ == '__main__':
         policy_net = DuelingDQN(env.action_space.n, "cuda").to(device)
         target_net = DuelingDQN(env.action_space.n, "cuda").to(device)
 
-    #policy_net = torch.load("dqn_pong_model")
+    #policy_net = torch.load("dqn_RoadRunner_model")
     target_net.load_state_dict(policy_net.state_dict())
 
     # setup optimizer
