@@ -389,20 +389,20 @@ if __name__ == '__main__':
     EPS_END = 0.02
     EPS_DECAY = 1000000
     INITIAL_BETA = 0.4
-    TARGET_UPDATE = 1000
+    TARGET_UPDATE = 10000
     RENDER = False
     lr = 1e-4
     #INITIAL_MEMORY = 32
-    INITIAL_MEMORY = 10000
-    ORB_MEMORY_SIZE = 10 * INITIAL_MEMORY
-    IRB_MEMORY_SIZE = 10 * INITIAL_MEMORY
+    INITIAL_MEMORY = 50000
+    ORB_MEMORY_SIZE = 2 * INITIAL_MEMORY
+    IRB_MEMORY_SIZE = 1 * INITIAL_MEMORY
     DEBUG = 10
-    IRB_UPDATES_FREQ = 100
+    IRB_UPDATES_FREQ = 200
     IRB_PUSH_FREQ = 200
 
     # Save Configurations
-    RESULTS_DIR = "RoadRunner-DQN-results"
-    MODEL_NAME = "RoadRunner_dqn_model"
+    RESULTS_DIR = "Breakout-DQN-results"
+    MODEL_NAME = "Breakout_dqn_model"
 
     # Initialize Model Flags     
     # Has two effects. 1. Sets the beta variable for PER. 2. Does so prio_optimize_model is used rather than optimize_model.
@@ -444,7 +444,7 @@ if __name__ == '__main__':
     logger.set_level(DEBUG)
 
     # create environment
-    env = gym.make("RoadRunnerNoFrameskip-v4")
+    env = gym.make("BreakoutNoFrameskip-v4")
     env = make_env(env)
     # create networks
     policy_net = DQNbn(n_actions=env.action_space.n).to(device)
