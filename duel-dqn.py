@@ -312,7 +312,7 @@ def train(env, n_episodes, render=False):
                 else:
                     optimize_model(ORB)
                 
-                if steps_done % IRB_UPDATES_FREQ == 0 and not (IRB_PER or HIGHEST_ERROR or PRIORITIZED_IRB):
+                if steps_done % IRB_UPDATES_FREQ == 0 and (IRB_PER or HIGHEST_ERROR or PRIORITIZED_IRB):
                     if IRB_PER:
                         optimize_model_prio(IRB)
                     else:
