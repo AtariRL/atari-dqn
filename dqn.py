@@ -79,6 +79,7 @@ def select_action(state):
 
 
 def optimize_model(memory):
+
     if len(memory) < BATCH_SIZE:
         return
     
@@ -311,12 +312,6 @@ def train(env, n_episodes, render=False):
                     optimize_model_prio(ORB)
                 else:
                     optimize_model(ORB)
-                
-                if steps_done % IRB_UPDATES_FREQ == 0 and not (IRB_PER or HIGHEST_ERROR or PRIORITIZED_IRB):
-                    if IRB_PER:
-                        optimize_model_prio(IRB)
-                    else:
-                        optimize_model(IRB)
                 
                 if steps_done % TARGET_UPDATE == 0:
                     target_net.load_state_dict(policy_net.state_dict())
