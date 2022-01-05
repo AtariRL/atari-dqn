@@ -395,10 +395,10 @@ if __name__ == '__main__':
     #INITIAL_MEMORY = 32
     INITIAL_MEMORY = 50000
     ORB_MEMORY_SIZE = 2 * INITIAL_MEMORY
-    IRB_MEMORY_SIZE = 1 * INITIAL_MEMORY
+    IRB_MEMORY_SIZE = 1000
     DEBUG = 10
-    IRB_UPDATES_FREQ = 200
-    IRB_PUSH_FREQ = 200
+    IRB_UPDATES_FREQ = 500
+    IRB_PUSH_FREQ = 50
 
     # Save Configurations
     RESULTS_DIR = "Breakout-duel-prio-irm-results"

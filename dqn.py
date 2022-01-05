@@ -312,12 +312,6 @@ def train(env, n_episodes, render=False):
                 else:
                     optimize_model(ORB)
                 
-                if steps_done % IRB_UPDATES_FREQ == 0 and (IRB_PER or HIGHEST_ERROR or PRIORITIZED_IRB):
-                    if IRB_PER:
-                        optimize_model_prio(IRB)
-                    else:
-                        optimize_model(IRB)
-                
                 if steps_done % TARGET_UPDATE == 0:
                     target_net.load_state_dict(policy_net.state_dict())
 
@@ -395,10 +389,10 @@ if __name__ == '__main__':
     #INITIAL_MEMORY = 32
     INITIAL_MEMORY = 50000
     ORB_MEMORY_SIZE = 2 * INITIAL_MEMORY
-    IRB_MEMORY_SIZE = 1 * INITIAL_MEMORY
+    IRB_MEMORY_SIZE = 1000
     DEBUG = 10
-    IRB_UPDATES_FREQ = 200
-    IRB_PUSH_FREQ = 200
+    IRB_UPDATES_FREQ = 500
+    IRB_PUSH_FREQ = 50
 
     # Save Configurations
     RESULTS_DIR = "Breakout-DQN-results"
