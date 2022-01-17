@@ -55,14 +55,8 @@ def save_params():
 def select_action(state):
     global steps_done
     sample = random.random()
-    # eps_end is the lowest eps can get. 0.02 + 0.0000001 = 0.02 (lowerbound)
-    # math.exp(-1. * steps_done / EPS_DECAY) = number between 0.999 (when value in math.exp close to 0) or 0.000001
-    # when values are higher
-    # multiplied by eps_start-eps_end (1 - 0.02) = 0.998
-    # so 0.998 * decreasing value torwards 0 (close to starting at 1, moving torwards 0)
     eps_threshold = EPS_END + (EPS_START - EPS_END)* \
         math.exp(-1. * steps_done / EPS_DECAY)
-    #print(eps_threshold)
     steps_done += 1
 
     # Increase the beta variable torwards 1 during training. The beta variable determines priority importance. 
@@ -180,7 +174,7 @@ def optimize_model_prio(memory):
         tmp.append(e.convert_to_named_tuple())
 
     logger.logkv("positions", positions)
-    #(Get it to be [('state', 'reward'), (1, 2), (1,2 )] etc
+
     batch = Transition(*zip(*tmp))
     # Unpack all the actions and rewards
     actions = tuple((map(lambda a: torch.tensor([[a]], device='cuda'), batch.action))) 
@@ -233,8 +227,6 @@ def optimize_model_prio(memory):
         memory.latest_max_TD_error = highest_TD_error
     
     weighted_loss = importance * TD_errors
-    # detaches updated weights (dosen't detach loss), updated weights will be converted to list to prioritize,
-    # so dosen't make sense to backpropagate
     updated_weights = (weighted_loss + 1e-6).data.cpu().detach().numpy()
     memory.set_priorities(positions, updated_weights.flatten().tolist())
 
@@ -305,7 +297,6 @@ def train(env, n_episodes, render=False):
             state = next_state
 
             # Optimize the model after replay memory have been filled to INITIAL_MEMORY
-            # Implement INITIAL_MEMORY for IRB? atm we implicitly it have reached a batch size worth of memories
             if steps_done > INITIAL_MEMORY:
                 # ORB will be used for an gradient update every step, IRB
                 # will be used every IRB_UPDATES_FREQ
@@ -427,7 +418,7 @@ if __name__ == '__main__':
     # create environment
     env = gym.make("BreakoutNoFrameskip-v4")
     env = make_env(env)
-    # create networks
+    # Create networks
     policy_net = DQNbn(n_actions=env.action_space.n).to(device)
     target_net = DQNbn(n_actions=env.action_space.n).to(device)
 
@@ -435,6 +426,7 @@ if __name__ == '__main__':
         policy_net = DuelingDQN(env.action_space.n, "cuda").to(device)
         target_net = DuelingDQN(env.action_space.n, "cuda").to(device)
 
+    # Comment in to use pretrained model
     #policy_net = torch.load("dqn_pong_model")
     target_net.load_state_dict(policy_net.state_dict())
 
